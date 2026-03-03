@@ -1,0 +1,621 @@
+---
+title: 'Anthropic Integration'
+description: 'Use AutoGen with Claude models from Anthropic'
+---
+
+## Overview
+
+The `AutoGen.Anthropic` package provides integration with Anthropic's Claude models, including support for function calling, streaming, and prompt caching.
+
+## Installation
+
+```bash
+dotnet add package AutoGen.Anthropic
+```
+
+## Basic Setup
+
+<Steps>
+  <Step title="Get your API key">
+    Obtain an API key from [Anthropic Console](https://console.anthropic.com/).
+  </Step>
+
+  <Step title="Set environment variable">
+    <CodeGroup>
+    ```bash Windows (PowerShell)
+    $env:ANTHROPIC_API_KEY="sk-ant-..."
+    ```
+    
+    ```bash macOS/Linux
+    export ANTHROPIC_API_KEY="sk-ant-..."
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Create an agent">
+    ```csharp
+    using AutoGen.Anthropic;
+    using AutoGen.Anthropic.Extensions;
+    using AutoGen.Anthropic.Utils;
+    using AutoGen.Core;
+
+    var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
+        ?? throw new Exception("Missing ANTHROPIC_API_KEY environment variable.");
+
+    var anthropicClient = new AnthropicClient(
+        new HttpClient(),
+        AnthropicConstants.Endpoint,
+        apiKey);
+
+    var agent = new AnthropicClientAgent(
+        anthropicClient,
+        "assistant",
+        AnthropicConstants.Claude3Haiku)
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    var response = await agent.SendAsync(
+        new TextMessage(Role.User, "Hello!", from: "user"));
+    ```
+  </Step>
+</Steps>
+
+## AnthropicClientAgent
+
+The main agent class for Claude models:
+
+```csharp
+using AutoGen.Anthropic;
+using AutoGen.Anthropic.Extensions;
+using AutoGen.Anthropic.Utils;
+
+var anthropicClient = new AnthropicClient(
+    httpClient: new HttpClient(),
+    endpoint: AnthropicConstants.Endpoint,
+    apiKey: apiKey);
+
+var agent = new AnthropicClientAgent(
+    client: anthropicClient,
+    name: "assistant",
+    modelName: AnthropicConstants.Claude3Sonnet,
+    systemMessage: "You are a helpful AI assistant",
+    temperature: 0.7f,
+    maxTokens: 1024)
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+### Constructor Parameters
+
+<ParamField path="client" type="AnthropicClient" required>
+  Anthropic client instance
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the agent
+</ParamField>
+
+<ParamField path="modelName" type="string" required>
+  Claude model to use (e.g., Claude 3 Opus, Sonnet, Haiku)
+</ParamField>
+
+<ParamField path="systemMessage" type="string">
+  Instructions defining the agent's behavior
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.7">
+  Sampling temperature (0.0 = deterministic, 1.0 = creative)
+</ParamField>
+
+<ParamField path="maxTokens" type="int" default="1024">
+  Maximum tokens to generate in response
+</ParamField>
+
+## Available Models
+
+Claude models available through AutoGen:
+
+<Tabs>
+  <Tab title="Claude 3.5">
+    ```csharp
+    using AutoGen.Anthropic.Utils;
+
+    // Claude 3.5 Sonnet (Latest and most capable)
+    var agent = new AnthropicClientAgent(
+        anthropicClient,
+        "assistant",
+        AnthropicConstants.Claude35Sonnet)
+        .RegisterMessageConnector();
+    ```
+  </Tab>
+  
+  <Tab title="Claude 3">
+    ```csharp
+    using AutoGen.Anthropic.Utils;
+
+    // Claude 3 Opus (Most intelligent)
+    var opus = new AnthropicClientAgent(
+        anthropicClient,
+        "opus_assistant",
+        AnthropicConstants.Claude3Opus)
+        .RegisterMessageConnector();
+
+    // Claude 3 Sonnet (Balanced)
+    var sonnet = new AnthropicClientAgent(
+        anthropicClient,
+        "sonnet_assistant",
+        AnthropicConstants.Claude3Sonnet)
+        .RegisterMessageConnector();
+
+    // Claude 3 Haiku (Fast and affordable)
+    var haiku = new AnthropicClientAgent(
+        anthropicClient,
+        "haiku_assistant",
+        AnthropicConstants.Claude3Haiku)
+        .RegisterMessageConnector();
+    ```
+  </Tab>
+  
+  <Tab title="Model Strings">
+    ```csharp
+    // Use model strings directly
+    var agent = new AnthropicClientAgent(
+        anthropicClient,
+        "assistant",
+        "claude-3-5-sonnet-20241022")  // Latest Sonnet
+        .RegisterMessageConnector();
+
+    // Or use constants
+    // AnthropicConstants.Claude35Sonnet
+    // AnthropicConstants.Claude3Opus  
+    // AnthropicConstants.Claude3Sonnet
+    // AnthropicConstants.Claude3Haiku
+    ```
+  </Tab>
+</Tabs>
+
+## Basic Usage
+
+Simple conversation with Claude:
+
+```csharp
+using AutoGen.Anthropic;
+using AutoGen.Anthropic.Extensions;
+using AutoGen.Core;
+
+var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+var anthropicClient = new AnthropicClient(
+    new HttpClient(),
+    AnthropicConstants.Endpoint,
+    apiKey);
+
+var agent = new AnthropicClientAgent(
+    anthropicClient,
+    "assistant",
+    AnthropicConstants.Claude3Haiku,
+    systemMessage: "You are a helpful coding assistant")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+// Send a message
+var response = await agent.SendAsync(
+    new TextMessage(Role.User, "Explain async/await in C#", from: "user"));
+
+Console.WriteLine(response.GetContent());
+```
+
+## Streaming Responses
+
+Stream responses token-by-token:
+
+```csharp
+using AutoGen.Core;
+
+var agent = new AnthropicClientAgent(
+    anthropicClient,
+    "assistant",
+    AnthropicConstants.Claude3Sonnet)
+    .RegisterMessageConnector();
+
+var messages = new[]
+{
+    new TextMessage(Role.User, "Write a story about a robot", from: "user")
+};
+
+await foreach (var message in agent.GenerateStreamingReplyAsync(messages))
+{
+    if (message.GetContent() is string content)
+    {
+        Console.Write(content);
+    }
+}
+```
+
+## Function Calling (Tool Use)
+
+Claude supports function calling through its tool use API:
+
+<Steps>
+  <Step title="Define functions">
+    ```csharp
+    using AutoGen.Core;
+
+    public partial class WeatherTools
+    {
+        /// <summary>
+        /// Get current weather
+        /// </summary>
+        /// <param name="location">city name</param>
+        [Function]
+        public async Task<string> GetWeather(string location)
+        {
+            return $"Weather in {location}: Sunny, 72°F";
+        }
+
+        /// <summary>
+        /// Get forecast
+        /// </summary>
+        /// <param name="location">city name</param>
+        /// <param name="days">number of days</param>
+        [Function]
+        public async Task<string> GetForecast(string location, int days)
+        {
+            return $"{days}-day forecast for {location}: Mostly sunny";
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Register tools with agent">
+    ```csharp
+    using AutoGen.Anthropic.Extensions;
+    using Microsoft.Extensions.AI;
+
+    var tools = new WeatherTools();
+
+    // Create tool definitions
+    AIFunction[] aiFunctions = [
+        AIFunctionFactory.Create(tools.GetWeather),
+        AIFunctionFactory.Create(tools.GetForecast),
+    ];
+
+    var functionCallMiddleware = new FunctionCallMiddleware(aiFunctions);
+
+    var agent = new AnthropicClientAgent(
+        anthropicClient,
+        "assistant",
+        AnthropicConstants.Claude3Sonnet)
+        .RegisterMessageConnector()
+        .RegisterStreamingMiddleware(functionCallMiddleware)
+        .RegisterPrintMessage();
+    ```
+  </Step>
+
+  <Step title="Use the agent">
+    ```csharp
+    var response = await agent.SendAsync(
+        new TextMessage(
+            Role.User,
+            "What's the weather in Seattle?",
+            from: "user"));
+
+    Console.WriteLine(response.GetContent());
+    // Claude calls the GetWeather function and returns:
+    // "The current weather in Seattle is sunny with a temperature of 72°F."
+    ```
+  </Step>
+</Steps>
+
+## Prompt Caching
+
+Claude supports prompt caching to reduce costs for repeated context:
+
+```csharp
+using AutoGen.Anthropic;
+using AutoGen.Anthropic.DTOs;
+using AutoGen.Core;
+
+var agent = new AnthropicClientAgent(
+    anthropicClient,
+    "assistant",
+    AnthropicConstants.Claude35Sonnet);
+
+// Create messages with cache control
+var systemMessage = new SystemMessage
+{
+    Text = @"
+        You are an expert C# developer.
+        You know all about .NET, ASP.NET Core, Entity Framework, and modern C# patterns.
+        Always write clean, maintainable, well-documented code.
+    ",
+    CacheControl = new CacheControl { Type = "ephemeral" }
+};
+
+var contextMessage = new SystemMessage
+{
+    Text = File.ReadAllText("large_codebase_context.txt"), // Large context
+    CacheControl = new CacheControl { Type = "ephemeral" }
+};
+
+// These cached system messages will be reused across requests
+var request = new ChatCompletionRequest
+{
+    Model = AnthropicConstants.Claude35Sonnet,
+    MaxTokens = 1024,
+    SystemMessage = new[] { systemMessage, contextMessage },
+    Messages = new[]
+    {
+        new RequestMessage
+        {
+            Role = "user",
+            Content = new ContentBase[]
+            {
+                new TextContent { Text = "Explain this code" }
+            }
+        }
+    }
+};
+
+var response = await anthropicClient.CreateChatCompletionsAsync(
+    request,
+    CancellationToken.None);
+```
+
+<Note>
+Prompt caching is automatically enabled for Claude 3.5 Sonnet and Claude 3 Opus. Cached content reduces costs by up to 90% for repeated context.
+</Note>
+
+## Message Connector
+
+Register the message connector to handle AutoGen message types:
+
+```csharp
+using AutoGen.Anthropic.Extensions;
+
+// Required for AutoGen message support
+var agent = new AnthropicClientAgent(/*...*/)
+    .RegisterMessageConnector();
+
+// Now supports:
+// - TextMessage
+// - ImageMessage (for vision)
+// - ToolCallMessage
+// - ToolCallResultMessage
+// - ToolCallAggregateMessage
+```
+
+## Multi-Agent Conversation
+
+Use Claude in group chats:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.Anthropic;
+using AutoGen.Anthropic.Extensions;
+
+var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+var client = new AnthropicClient(
+    new HttpClient(),
+    AnthropicConstants.Endpoint,
+    apiKey);
+
+// Create multiple Claude agents with different roles
+var researcher = new AnthropicClientAgent(
+    client,
+    "researcher",
+    AnthropicConstants.Claude3Sonnet,
+    systemMessage: "You research and gather information")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var writer = new AnthropicClientAgent(
+    client,
+    "writer",
+    AnthropicConstants.Claude3Sonnet,
+    systemMessage: "You write clear, engaging content")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var editor = new AnthropicClientAgent(
+    client,
+    "editor",
+    AnthropicConstants.Claude3Opus,
+    systemMessage: "You review and improve content")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var admin = new AnthropicClientAgent(
+    client,
+    "admin",
+    AnthropicConstants.Claude35Sonnet)
+    .RegisterMessageConnector();
+
+var group = new GroupChat(
+    members: [researcher, writer, editor],
+    admin: admin);
+
+var result = await group.CallAsync(
+    new[] { new TextMessage(Role.User, "Write an article about AI") },
+    maxRound: 10);
+```
+
+## Vision Support
+
+Claude 3 models support image understanding:
+
+```csharp
+using AutoGen.Core;
+
+var agent = new AnthropicClientAgent(
+    anthropicClient,
+    "vision_assistant",
+    AnthropicConstants.Claude3Opus)
+    .RegisterMessageConnector();
+
+// Send image with text
+var messages = new IMessage[]
+{
+    new ImageMessage(
+        Role.User,
+        "https://example.com/diagram.png",
+        from: "user"),
+    new TextMessage(
+        Role.User,
+        "What's in this diagram? Explain the architecture.",
+        from: "user")
+};
+
+var response = await agent.SendAsync(messages);
+Console.WriteLine(response.GetContent());
+```
+
+## Configuration Options
+
+### Temperature Control
+
+```csharp
+// More deterministic (better for code, analysis)
+var deterministic = new AnthropicClientAgent(
+    anthropicClient,
+    "analyst",
+    AnthropicConstants.Claude3Sonnet,
+    temperature: 0.0f)
+    .RegisterMessageConnector();
+
+// More creative (better for writing, brainstorming)
+var creative = new AnthropicClientAgent(
+    anthropicClient,
+    "writer",
+    AnthropicConstants.Claude3Opus,
+    temperature: 1.0f)
+    .RegisterMessageConnector();
+```
+
+### Token Limits
+
+```csharp
+// Short responses
+var concise = new AnthropicClientAgent(
+    anthropicClient,
+    "assistant",
+    AnthropicConstants.Claude3Haiku,
+    maxTokens: 500)
+    .RegisterMessageConnector();
+
+// Long-form content
+var verbose = new AnthropicClientAgent(
+    anthropicClient,
+    "writer",
+    AnthropicConstants.Claude3Opus,
+    maxTokens: 4096)
+    .RegisterMessageConnector();
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Model Selection">
+    - **Claude 3.5 Sonnet**: Best overall performance, coding, analysis
+    - **Claude 3 Opus**: Most capable for complex reasoning
+    - **Claude 3 Sonnet**: Balanced performance and cost
+    - **Claude 3 Haiku**: Fast and affordable for simple tasks
+  </Accordion>
+  
+  <Accordion title="Cost Optimization">
+    ```csharp
+    // Use Haiku for simple tasks
+    var simpleAgent = new AnthropicClientAgent(
+        anthropicClient,
+        "simple_assistant",
+        AnthropicConstants.Claude3Haiku,
+        maxTokens: 500)
+        .RegisterMessageConnector();
+    
+    // Use prompt caching for large contexts
+    // Cache system messages and large documents
+    // Reduces cost by 90% on cache hits
+    
+    // Use Opus only when necessary
+    var expertAgent = new AnthropicClientAgent(
+        anthropicClient,
+        "expert",
+        AnthropicConstants.Claude3Opus)
+        .RegisterMessageConnector();
+    ```
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    ```csharp
+    using AutoGen.Anthropic.DTOs;
+
+    try
+    {
+        var response = await agent.SendAsync(message);
+    }
+    catch (AnthropicException ex) when (ex.StatusCode == 429)
+    {
+        // Rate limit exceeded
+        Console.WriteLine("Rate limited. Waiting...");
+        await Task.Delay(TimeSpan.FromSeconds(60));
+        // Retry
+    }
+    catch (AnthropicException ex)
+    {
+        Console.WriteLine($"Anthropic API error: {ex.Message}");
+        // Handle error
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Reuse `AnthropicClient` and `HttpClient` instances
+    - Use streaming for long responses
+    - Enable prompt caching for repeated contexts
+    - Set appropriate `maxTokens` to control costs
+    - Use Haiku for high-throughput applications
+  </Accordion>
+</AccordionGroup>
+
+## Environment Variables
+
+<ParamField path="ANTHROPIC_API_KEY" type="string" required>
+  Your Anthropic API key from console.anthropic.com
+</ParamField>
+
+## Comparison with OpenAI
+
+<CardGroup cols={2}>
+  <Card title="Claude Advantages">
+    - Longer context windows (200K tokens)
+    - Better instruction following
+    - Stronger refusal of harmful requests
+    - Prompt caching for cost savings
+    - Constitutional AI training
+  </Card>
+  
+  <Card title="When to Use Each">
+    - **Claude**: Long documents, detailed analysis, code review
+    - **GPT-4**: Function calling, JSON mode, broader ecosystem
+    - **Mix both**: Use strengths of each model in group chats
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="OpenAI Integration" icon="openai" href="/dotnet/openai">
+    Use GPT models with AutoGen
+  </Card>
+  
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Add tools to Claude agents
+  </Card>
+  
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Create multi-agent workflows
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples">
+    See complete examples
+  </Card>
+</CardGroup>

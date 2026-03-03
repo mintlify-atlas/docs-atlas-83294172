@@ -1,0 +1,540 @@
+---
+title: 'OpenAI Integration'
+description: 'Use AutoGen with OpenAI and Azure OpenAI models'
+---
+
+## Overview
+
+The `AutoGen.OpenAI` package provides seamless integration with OpenAI's GPT models, including GPT-4, GPT-4 Turbo, GPT-3.5, and Azure OpenAI Service.
+
+## Installation
+
+```bash
+dotnet add package AutoGen.OpenAI
+```
+
+## OpenAI Setup
+
+Connect to OpenAI's API:
+
+<Steps>
+  <Step title="Get your API key">
+    Obtain an API key from [OpenAI Platform](https://platform.openai.com/api-keys).
+  </Step>
+
+  <Step title="Set environment variable">
+    <CodeGroup>
+    ```bash Windows (PowerShell)
+    $env:OPENAI_API_KEY="sk-..."
+    ```
+    
+    ```bash macOS/Linux
+    export OPENAI_API_KEY="sk-..."
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Create an agent">
+    ```csharp
+    using AutoGen.OpenAI;
+    using AutoGen.OpenAI.Extension;
+    using OpenAI;
+
+    var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+    var openAIClient = new OpenAIClient(apiKey);
+
+    var agent = new OpenAIChatAgent(
+        chatClient: openAIClient.GetChatClient("gpt-4"),
+        name: "assistant",
+        systemMessage: "You are a helpful AI assistant")
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    var response = await agent.SendAsync("Hello!");
+    ```
+  </Step>
+</Steps>
+
+## OpenAIChatAgent
+
+The main agent class for OpenAI models:
+
+```csharp
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using OpenAI;
+
+var openAIClient = new OpenAIClient(apiKey);
+
+var agent = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4-turbo"),
+    name: "assistant",
+    systemMessage: "You are a helpful assistant",
+    seed: 0,                    // For reproducible outputs
+    temperature: 0.7f,          // Creativity level
+    maxTokens: 2000,            // Max response length
+    responseFormat: null)       // JSON mode if needed
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+### Constructor Parameters
+
+<ParamField path="chatClient" type="ChatClient" required>
+  OpenAI ChatClient instance for the specific model
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the agent
+</ParamField>
+
+<ParamField path="systemMessage" type="string" default="You are a helpful assistant">
+  Instructions defining the agent's behavior
+</ParamField>
+
+<ParamField path="seed" type="int?">
+  Random seed for deterministic outputs (when supported by model)
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.7">
+  Sampling temperature (0.0 = deterministic, 2.0 = very creative)
+</ParamField>
+
+<ParamField path="maxTokens" type="int" default="1024">
+  Maximum tokens to generate in response
+</ParamField>
+
+<ParamField path="responseFormat" type="ChatResponseFormat?">
+  Response format (e.g., JSON mode)
+</ParamField>
+
+## Available Models
+
+<Tabs>
+  <Tab title="GPT-4 Models">
+    ```csharp
+    // GPT-4 Turbo (Recommended)
+    var gpt4Turbo = openAIClient.GetChatClient("gpt-4-turbo");
+    var agent = new OpenAIChatAgent(
+        chatClient: gpt4Turbo,
+        name: "assistant")
+        .RegisterMessageConnector();
+
+    // GPT-4 (Original)
+    var gpt4 = openAIClient.GetChatClient("gpt-4");
+
+    // GPT-4 32K (Large context)
+    var gpt4_32k = openAIClient.GetChatClient("gpt-4-32k");
+    ```
+  </Tab>
+  
+  <Tab title="GPT-3.5 Models">
+    ```csharp
+    // GPT-3.5 Turbo (Fast and cost-effective)
+    var gpt35 = openAIClient.GetChatClient("gpt-3.5-turbo");
+    var agent = new OpenAIChatAgent(
+        chatClient: gpt35,
+        name: "assistant",
+        temperature: 0.7f)
+        .RegisterMessageConnector();
+
+    // GPT-3.5 Turbo 16K (Larger context)
+    var gpt35_16k = openAIClient.GetChatClient("gpt-3.5-turbo-16k");
+    ```
+  </Tab>
+  
+  <Tab title="Latest Models">
+    ```csharp
+    // GPT-4o (Optimized)
+    var gpt4o = openAIClient.GetChatClient("gpt-4o");
+    var agent = new OpenAIChatAgent(
+        chatClient: gpt4o,
+        name: "assistant")
+        .RegisterMessageConnector();
+
+    // GPT-4o Mini (Fast and efficient)
+    var gpt4oMini = openAIClient.GetChatClient("gpt-4o-mini");
+
+    // O1 Preview (Advanced reasoning)
+    var o1Preview = openAIClient.GetChatClient("o1-preview");
+    ```
+  </Tab>
+</Tabs>
+
+## Azure OpenAI
+
+Connect to models deployed on Azure:
+
+<Steps>
+  <Step title="Set up credentials">
+    ```bash
+    # Set your Azure OpenAI credentials
+    export AZURE_OPENAI_API_KEY="your-azure-key"
+    export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+    export AZURE_OPENAI_DEPLOY_NAME="your-deployment-name"
+    ```
+  </Step>
+
+  <Step title="Create Azure OpenAI agent">
+    ```csharp
+    using System.ClientModel;
+    using AutoGen.OpenAI.Extension;
+    using Azure.AI.OpenAI;
+
+    var apiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY");
+    var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT");
+    var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOY_NAME");
+
+    // Create Azure OpenAI client
+    var azureClient = new AzureOpenAIClient(
+        new Uri(endpoint),
+        new ApiKeyCredential(apiKey));
+
+    var agent = new OpenAIChatAgent(
+        chatClient: azureClient.GetChatClient(deploymentName),
+        name: "assistant",
+        systemMessage: "You are a helpful assistant",
+        seed: 0)
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    var response = await agent.SendAsync(
+        "Can you write a piece of C# code to calculate 100th Fibonacci?");
+    ```
+  </Step>
+</Steps>
+
+## Streaming Responses
+
+Stream responses token-by-token for real-time output:
+
+```csharp
+using AutoGen.Core;
+
+var agent = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4"),
+    name: "assistant")
+    .RegisterMessageConnector();
+
+var messages = new[]
+{
+    new TextMessage(Role.User, "Write a long story about a robot")
+};
+
+await foreach (var message in agent.GenerateStreamingReplyAsync(messages))
+{
+    if (message.GetContent() is string content)
+    {
+        Console.Write(content);
+    }
+}
+```
+
+## JSON Mode
+
+Force responses in JSON format:
+
+```csharp
+using OpenAI.Chat;
+
+var agent = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4"),
+    name: "assistant",
+    systemMessage: "You output valid JSON only",
+    responseFormat: ChatResponseFormat.CreateJsonObjectFormat())
+    .RegisterMessageConnector();
+
+var response = await agent.SendAsync(@"
+    Create a JSON object for a person with name, age, and hobbies.
+");
+
+Console.WriteLine(response.GetContent());
+// Output: {"name": "John", "age": 30, "hobbies": ["reading", "gaming"]}
+```
+
+## Structured Output
+
+Use JSON schema for strongly-typed responses:
+
+```csharp
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using OpenAI.Chat;
+
+// Define your schema
+public class Person
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("age")]
+    public int Age { get; set; }
+
+    [JsonPropertyName("email")]
+    public string Email { get; set; }
+}
+
+var jsonSchema = JsonSerializer.Serialize(new
+{
+    type = "object",
+    properties = new
+    {
+        name = new { type = "string" },
+        age = new { type = "integer" },
+        email = new { type = "string" }
+    },
+    required = new[] { "name", "age", "email" },
+    additionalProperties = false
+});
+
+var agent = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4"),
+    name: "assistant",
+    systemMessage: "Extract person information as JSON",
+    responseFormat: ChatResponseFormat.CreateJsonSchemaFormat(
+        "person",
+        BinaryData.FromString(jsonSchema)))
+    .RegisterMessageConnector();
+
+var response = await agent.SendAsync(
+    "John Doe is 30 years old. His email is john@example.com");
+
+var person = JsonSerializer.Deserialize<Person>(response.GetContent());
+Console.WriteLine($"Name: {person.Name}, Age: {person.Age}");
+```
+
+## Function Calling
+
+Combine with AutoGen's function calling:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using Microsoft.Extensions.AI;
+
+public partial class WeatherFunctions
+{
+    /// <summary>
+    /// Get current weather
+    /// </summary>
+    /// <param name="location">city name</param>
+    [Function]
+    public async Task<string> GetWeather(string location)
+    {
+        return $"Weather in {location}: Sunny, 72°F";
+    }
+}
+
+var tools = new WeatherFunctions();
+var gpt4 = openAIClient.GetChatClient("gpt-4");
+
+var functionCallMiddleware = new FunctionCallMiddleware(
+    functions: [tools.GetWeatherFunctionContract],
+    functionMap: new Dictionary<string, Func<string, Task<string>>>
+    {
+        { nameof(tools.GetWeather), tools.GetWeatherWrapper }
+    });
+
+var agent = new OpenAIChatAgent(
+    chatClient: gpt4,
+    name: "assistant")
+    .RegisterMessageConnector()
+    .RegisterStreamingMiddleware(functionCallMiddleware)
+    .RegisterPrintMessage();
+
+var response = await agent.SendAsync("What's the weather in Seattle?");
+Console.WriteLine(response.GetContent());
+// Output: The weather in Seattle is sunny with a temperature of 72°F.
+```
+
+## Vision (GPT-4 Vision)
+
+Process images with GPT-4 Vision models:
+
+```csharp
+using AutoGen.Core;
+
+var agent = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4-vision-preview"),
+    name: "vision_assistant")
+    .RegisterMessageConnector();
+
+// Create a multimodal message
+var imageMessage = new ImageMessage(
+    Role.User,
+    "https://example.com/image.jpg",
+    from: "user");
+
+var textMessage = new TextMessage(
+    Role.User,
+    "What's in this image?",
+    from: "user");
+
+var response = await agent.SendAsync(
+    new[] { imageMessage, textMessage });
+
+Console.WriteLine(response.GetContent());
+```
+
+## Message Connector
+
+The message connector converts between AutoGen and OpenAI message formats:
+
+```csharp
+using AutoGen.OpenAI.Extension;
+
+// Register message connector to handle AutoGen message types
+var agent = new OpenAIChatAgent(/*...*/)
+    .RegisterMessageConnector();  // Required for AutoGen messages
+
+// Now supports:
+// - TextMessage
+// - ImageMessage  
+// - ToolCallMessage
+// - ToolCallResultMessage
+// - ToolCallAggregateMessage
+```
+
+## Configuration Options
+
+### ConversableAgentConfig (Legacy)
+
+For agents using the older configuration style:
+
+```csharp
+using AutoGen;
+using AutoGen.OpenAI;
+
+var openAIConfig = new OpenAIConfig(apiKey, "gpt-4");
+
+var agent = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are helpful",
+    llmConfig: new ConversableAgentConfig
+    {
+        Temperature = 0,
+        MaxToken = 2000,
+        ConfigList = [openAIConfig],
+        TimeoutInSeconds = 60,
+        StopSequence = ["END"]
+    });
+```
+
+## Connecting to Ollama
+
+Use OpenAI-compatible endpoints:
+
+```csharp
+using OpenAI;
+
+// Point to Ollama's OpenAI-compatible endpoint
+var ollamaClient = new OpenAIClient(
+    new ApiKeyCredential("not-used"),
+    new OpenAIClientOptions
+    {
+        Endpoint = new Uri("http://localhost:11434/v1")
+    });
+
+var agent = new OpenAIChatAgent(
+    chatClient: ollamaClient.GetChatClient("llama2"),
+    name: "assistant")
+    .RegisterMessageConnector();
+
+var response = await agent.SendAsync("Hello!");
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Model Selection">
+    - **GPT-4o / GPT-4 Turbo**: Best for complex reasoning, function calling
+    - **GPT-4o Mini**: Fast, cost-effective for simple tasks
+    - **GPT-3.5 Turbo**: Budget-friendly for high-volume applications
+    - **O1 Models**: Advanced reasoning for complex problems
+  </Accordion>
+  
+  <Accordion title="Cost Optimization">
+    ```csharp
+    // Use cheaper models for simple tasks
+    var simpleAgent = new OpenAIChatAgent(
+        chatClient: openAIClient.GetChatClient("gpt-3.5-turbo"),
+        name: "simple_assistant",
+        maxTokens: 500,  // Limit response length
+        temperature: 0)  // Faster, more deterministic
+        .RegisterMessageConnector();
+    
+    // Reserve GPT-4 for complex reasoning
+    var expertAgent = new OpenAIChatAgent(
+        chatClient: openAIClient.GetChatClient("gpt-4-turbo"),
+        name: "expert_assistant")
+        .RegisterMessageConnector();
+    ```
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    ```csharp
+    try
+    {
+        var response = await agent.SendAsync(message);
+    }
+    catch (OpenAIException ex) when (ex.StatusCode == 429)
+    {
+        // Rate limit - implement backoff
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        // Retry
+    }
+    catch (OpenAIException ex) when (ex.StatusCode == 500)
+    {
+        // Server error - retry with different model
+        Console.WriteLine($"Server error: {ex.Message}");
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Reuse `OpenAIClient` instances
+    - Use streaming for long responses
+    - Set appropriate `maxTokens` to control costs
+    - Cache responses when possible
+    - Use `seed` parameter for reproducible outputs
+  </Accordion>
+</AccordionGroup>
+
+## Environment Variables
+
+<ParamField path="OPENAI_API_KEY" type="string" required>
+  Your OpenAI API key from platform.openai.com
+</ParamField>
+
+<ParamField path="AZURE_OPENAI_API_KEY" type="string">
+  Your Azure OpenAI API key
+</ParamField>
+
+<ParamField path="AZURE_OPENAI_ENDPOINT" type="string">
+  Your Azure OpenAI endpoint URL
+</ParamField>
+
+<ParamField path="AZURE_OPENAI_DEPLOY_NAME" type="string">
+  Your Azure OpenAI deployment name
+</ParamField>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Anthropic" icon="message-bot" href="/dotnet/anthropic">
+    Use Claude models with AutoGen
+  </Card>
+  
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Add tools to OpenAI agents
+  </Card>
+  
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Create multi-agent workflows
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples">
+    See complete examples
+  </Card>
+</CardGroup>

@@ -1,0 +1,143 @@
+---
+title: AgentChat overview
+description: High-level API for building multi-agent applications
+icon: comments
+---
+
+AgentChat is AutoGen's high-level API for building multi-agent applications. It provides intuitive defaults and abstractions that make it easy to get started while still offering flexibility for advanced use cases.
+
+## What is AgentChat?
+
+AgentChat builds on top of the [Core API](/core/overview) to provide:
+
+- **Pre-built agent types** - AssistantAgent, CodeExecutorAgent, UserProxyAgent, and more
+- **Team patterns** - RoundRobin, Selector, Swarm, and GraphFlow orchestration
+- **Simplified tool integration** - Easy-to-use tool and MCP server support
+- **Model flexibility** - Support for all major LLM providers
+- **Memory management** - Built-in state and memory handling
+
+<CardGroup cols={2}>
+  <Card title="Agents" icon="robot" href="/agentchat/agents">
+    Learn about AssistantAgent, CodeExecutorAgent, and custom agents
+  </Card>
+  <Card title="Teams" icon="users" href="/agentchat/teams">
+    Explore multi-agent orchestration patterns
+  </Card>
+  <Card title="Tools" icon="wrench" href="/agentchat/tools">
+    Integrate tools and MCP servers with your agents
+  </Card>
+  <Card title="Models" icon="brain" href="/agentchat/models">
+    Connect to OpenAI, Anthropic, Azure, and more
+  </Card>
+</CardGroup>
+
+## When to use AgentChat
+
+Use AgentChat when you want to:
+
+- **Rapid prototyping** - Get a working multi-agent system in minutes
+- **Common patterns** - Use established orchestration patterns (round-robin, selector, swarm)
+- **Simplified development** - Focus on your application logic, not infrastructure
+- **Tool integration** - Easily connect agents to external tools and APIs
+
+<Note>
+For advanced use cases requiring full control over message routing and agent lifecycle, consider using the [Core API](/core/overview) directly.
+</Note>
+
+## Quick example
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+async def main() -> None:
+    # Create model client
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Create assistant agent
+    agent = AssistantAgent(
+        "assistant",
+        model_client=model_client,
+        system_message="You are a helpful assistant."
+    )
+    
+    # Run a task
+    result = await agent.run(task="What is 2+2?")
+    print(result.messages)
+
+asyncio.run(main())
+```
+
+## Core concepts
+
+### Agents
+
+[Agents](/agentchat/agents) are the building blocks of your application. Each agent has:
+
+- A **name** and **description**
+- A **model client** for LLM interactions
+- Optional **tools** for external capabilities
+- A **system message** defining its behavior
+
+### Teams
+
+[Teams](/agentchat/teams) orchestrate multiple agents working together:
+
+- **RoundRobinGroupChat** - Agents take turns in sequence
+- **SelectorGroupChat** - An LLM selects the next speaker
+- **Swarm** - Agents hand off tasks dynamically
+- **GraphFlow** - Custom graph-based orchestration
+
+### Messages
+
+Agents communicate through typed messages:
+
+- `TextMessage` - Plain text communication
+- `ToolCallSummaryMessage` - Results from tool execution
+- `HandoffMessage` - Task transfers between agents
+- `StructuredMessage` - Typed structured data
+
+### Tools
+
+[Tools](/agentchat/tools) extend agent capabilities:
+
+- **Function tools** - Python functions as tools
+- **MCP servers** - Model Context Protocol servers
+- **Code execution** - Safe code execution in containers
+- **Custom tools** - Build your own tool implementations
+
+## Architecture
+
+AgentChat sits on top of the Core layer:
+
+```
+┌─────────────────────────────────────┐
+│         Your Application            │
+├─────────────────────────────────────┤
+│  AgentChat (High-level API)        │
+│  - Agents, Teams, Tools             │
+├─────────────────────────────────────┤
+│  Core (Event-driven runtime)       │
+│  - Actor model, Message passing     │
+├─────────────────────────────────────┤
+│  Extensions (Model clients, etc)   │
+└─────────────────────────────────────┘
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first agent in 5 minutes
+  </Card>
+  <Card title="Agents" icon="robot" href="/agentchat/agents">
+    Explore different agent types
+  </Card>
+  <Card title="Teams" icon="users" href="/agentchat/teams">
+    Learn about multi-agent patterns
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/hello-world">
+    See AgentChat in action
+  </Card>
+</CardGroup>

@@ -1,0 +1,222 @@
+---
+title: 'Quick Start'
+description: 'Build your first AutoGen application in C#'
+---
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- .NET 6.0 or later installed
+- An OpenAI API key
+- Visual Studio, VS Code, or your preferred C# IDE
+
+## Installation
+
+Install the AutoGen package, which includes all core features:
+
+```bash
+dotnet add package AutoGen
+```
+
+For more granular control, see the [Installation Guide](/dotnet/installation).
+
+## Your First Agent Conversation
+
+Let's create a simple conversation between a user and an AI assistant.
+
+<Steps>
+  <Step title="Create a new console application">
+    ```bash
+    dotnet new console -n AutoGenQuickStart
+    cd AutoGenQuickStart
+    dotnet add package AutoGen
+    ```
+  </Step>
+
+  <Step title="Set up your OpenAI API key">
+    Set your OpenAI API key as an environment variable:
+    
+    <CodeGroup>
+    ```bash Windows (PowerShell)
+    $env:OPENAI_API_KEY="your-api-key-here"
+    ```
+    
+    ```bash macOS/Linux
+    export OPENAI_API_KEY="your-api-key-here"
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Create the application">
+    Replace the contents of `Program.cs` with:
+
+    ```csharp Program.cs
+    using AutoGen;
+    using AutoGen.OpenAI;
+
+    var openAIKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
+        ?? throw new Exception("Please set OPENAI_API_KEY environment variable.");
+    
+    var gpt35Config = new OpenAIConfig(openAIKey, "gpt-3.5-turbo");
+
+    // Create an assistant agent
+    var assistantAgent = new AssistantAgent(
+        name: "assistant",
+        systemMessage: "You are a helpful assistant that can answer questions and help with tasks.",
+        llmConfig: new ConversableAgentConfig
+        {
+            Temperature = 0,
+            ConfigList = [gpt35Config],
+        })
+        .RegisterPrintMessage(); // Print messages to console
+
+    // Create a user proxy agent
+    var userProxyAgent = new UserProxyAgent(
+        name: "user",
+        humanInputMode: HumanInputMode.ALWAYS) // Always ask for user input
+        .RegisterPrintMessage();
+
+    // Start the conversation
+    await userProxyAgent.InitiateChatAsync(
+        receiver: assistantAgent,
+        message: "Hey assistant, please help me write a C# function to calculate factorial.",
+        maxRound: 10);
+    ```
+  </Step>
+
+  <Step title="Run the application">
+    ```bash
+    dotnet run
+    ```
+    
+    The application will start a conversation where you can interact with the AI assistant. Type your messages and press Enter. The conversation continues until you reach the maximum rounds or terminate it.
+  </Step>
+</Steps>
+
+## Understanding the Code
+
+### AssistantAgent
+
+The `AssistantAgent` is an AI-powered agent that uses a language model to generate responses:
+
+```csharp
+var assistantAgent = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are a helpful assistant.",
+    llmConfig: new ConversableAgentConfig
+    {
+        Temperature = 0,
+        ConfigList = [gpt35Config],
+    });
+```
+
+- **name**: Unique identifier for the agent
+- **systemMessage**: Instructions that define the agent's behavior
+- **llmConfig**: Configuration including model settings and API keys
+- **Temperature**: Controls randomness (0 = deterministic, 1 = creative)
+
+### UserProxyAgent
+
+The `UserProxyAgent` represents a human user in the conversation:
+
+```csharp
+var userProxyAgent = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.ALWAYS);
+```
+
+- **HumanInputMode.ALWAYS**: Prompts for user input before each message
+- **HumanInputMode.NEVER**: Fully autonomous (uses default replies)
+- **HumanInputMode.TERMINATE**: Only prompts when termination is suggested
+
+### Message Printing
+
+The `RegisterPrintMessage()` middleware nicely formats and prints messages to the console:
+
+```csharp
+.RegisterPrintMessage()
+```
+
+### InitiateChatAsync
+
+Starts the conversation between agents:
+
+```csharp
+await userProxyAgent.InitiateChatAsync(
+    receiver: assistantAgent,
+    message: "Initial message",
+    maxRound: 10);
+```
+
+## Autonomous Mode Example
+
+For a fully autonomous conversation without human input:
+
+```csharp
+using AutoGen;
+using AutoGen.OpenAI;
+
+var openAIKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var gpt35Config = new OpenAIConfig(openAIKey, "gpt-3.5-turbo");
+
+var assistant = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are a helpful coding assistant.",
+    llmConfig: new ConversableAgentConfig
+    {
+        Temperature = 0,
+        ConfigList = [gpt35Config],
+    })
+    .RegisterPrintMessage();
+
+var user = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.NEVER,
+    defaultReply: "Thank you!")
+    .RegisterPrintMessage();
+
+await user.InitiateChatAsync(
+    receiver: assistant,
+    message: "Write a C# function to check if a number is prime.",
+    maxRound: 3);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agents" icon="robot" href="/dotnet/agents">
+    Learn more about agent types and configurations
+  </Card>
+  
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Add custom functions to your agents
+  </Card>
+  
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Create multi-agent conversations
+  </Card>
+  
+  <Card title="Code Execution" icon="terminal" href="/dotnet/code-execution">
+    Execute code snippets dynamically
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="API Key Not Found">
+    Make sure you've set the `OPENAI_API_KEY` environment variable correctly. In Windows, you may need to restart your terminal or IDE after setting it.
+  </Accordion>
+  
+  <Accordion title="Package Not Found">
+    Ensure you're using .NET 6.0 or later and that you've restored packages:
+    ```bash
+    dotnet restore
+    ```
+  </Accordion>
+  
+  <Accordion title="Connection Errors">
+    Check your internet connection and verify that your OpenAI API key is valid and has sufficient credits.
+  </Accordion>
+</AccordionGroup>

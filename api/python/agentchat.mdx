@@ -1,0 +1,697 @@
+---
+title: 'autogen_agentchat'
+description: 'High-level Python API for building conversational multi-agent applications'
+icon: 'comments'
+---
+
+The `autogen_agentchat` package provides high-level abstractions for building conversational agents and teams.
+
+## Agent Classes
+
+<AccordionGroup>
+  <Accordion title="AssistantAgent" icon="robot">
+    AI-powered assistant agent with tool use and handoff capabilities.
+
+    ```python
+    from autogen_agentchat.agents import AssistantAgent
+    from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+    assistant = AssistantAgent(
+        name="assistant",
+        model_client=OpenAIChatCompletionClient(model="gpt-4"),
+        tools=[calculator_tool],
+        handoffs=["supervisor"],
+        system_message="You are a helpful assistant.",
+        description="General purpose assistant"
+    )
+
+    # Run the agent
+    result = await assistant.run(task="Calculate 25 * 4")
+    print(result.messages)
+    ```
+
+    <ParamField path="name" type="str" required>
+      Unique name for the agent
+    </ParamField>
+
+    <ParamField path="model_client" type="ChatCompletionClient" required>
+      LLM client for generating responses
+    </ParamField>
+
+    <ParamField path="tools" type="List[Tool] | None">
+      Tools the agent can use
+    </ParamField>
+
+    <ParamField path="handoffs" type="List[Handoff | str] | None">
+      Other agents this agent can transfer control to
+    </ParamField>
+
+    <ParamField path="system_message" type="str | None">
+      System prompt for the agent
+    </ParamField>
+
+    <ParamField path="description" type="str" required>
+      Description of the agent's capabilities
+    </ParamField>
+
+    <ParamField path="model_context" type="ChatCompletionContext | None">
+      Context manager for conversation history
+    </ParamField>
+
+    <ParamField path="memory" type="List[Memory] | None">
+      Memory modules for the agent
+    </ParamField>
+
+    <ParamField path="reflect_on_tool_use" type="bool">
+      Whether to reflect on tool execution results (default: False)
+    </ParamField>
+
+    <ParamField path="max_tool_iterations" type="int">
+      Maximum tool call iterations per turn (default: 1)
+    </ParamField>
+
+    ### Methods
+
+    <ResponseField name="on_messages" type="async method">
+      Process messages and return a response
+
+      ```python
+      response = await assistant.on_messages(
+          messages=[TextMessage(content="Hello", source="user")],
+          cancellation_token=token
+      )
+      ```
+
+      <ParamField path="messages" type="Sequence[ChatMessage]" required>
+        Conversation messages
+      </ParamField>
+
+      <ParamField path="cancellation_token" type="CancellationToken | None">
+        Token to cancel the operation
+      </ParamField>
+
+      Returns: `Response` with the agent's reply
+    </ResponseField>
+
+    <ResponseField name="on_messages_stream" type="async generator">
+      Stream messages and events as they're generated
+
+      ```python
+      async for message in assistant.on_messages_stream(messages):
+          if isinstance(message, TextMessage):
+              print(message.content)
+      ```
+    </ResponseField>
+
+    <ResponseField name="run" type="async method">
+      Run the agent with a task
+
+      ```python
+      result = await assistant.run(
+          task="Write a poem",
+          termination_condition=MaxMessageTermination(10)
+      )
+      ```
+
+      <ParamField path="task" type="str | ChatMessage" required>
+        Initial task or message
+      </ParamField>
+
+      <ParamField path="termination_condition" type="TerminationCondition | None">
+        Condition to stop execution
+      </ParamField>
+
+      Returns: `TaskResult` with conversation history
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="UserProxyAgent" icon="user">
+    Agent representing a human user with input capabilities.
+
+    ```python
+    from autogen_agentchat.agents import UserProxyAgent
+
+    user = UserProxyAgent(
+        name="user",
+        description="Human user"
+    )
+
+    # Agent will prompt for input during execution
+    result = await user.run(task="Enter your message")
+    ```
+
+    <ParamField path="name" type="str" required>
+      Agent name
+    </ParamField>
+
+    <ParamField path="description" type="str" required>
+      Agent description
+    </ParamField>
+
+    <ParamField path="input_func" type="Callable | None">
+      Custom function for getting user input
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="CodeExecutorAgent" icon="code">
+    Agent that executes code in a sandboxed environment.
+
+    ```python
+    from autogen_agentchat.agents import CodeExecutorAgent
+    from autogen_core.code_executor import DockerCommandLineCodeExecutor
+
+    executor_agent = CodeExecutorAgent(
+        name="executor",
+        code_executor=DockerCommandLineCodeExecutor(),
+        description="Executes Python code"
+    )
+    ```
+
+    <ParamField path="name" type="str" required>
+      Agent name
+    </ParamField>
+
+    <ParamField path="code_executor" type="CodeExecutor" required>
+      Code execution backend
+    </ParamField>
+
+    <ParamField path="approval_func" type="ApprovalFuncType | None">
+      Function to approve code before execution
+    </ParamField>
+
+    <ParamField path="description" type="str" required>
+      Agent description
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="SocietyOfMindAgent" icon="brain">
+    Meta-agent that manages an internal team of agents.
+
+    ```python
+    from autogen_agentchat.agents import SocietyOfMindAgent
+    from autogen_agentchat.teams import RoundRobinGroupChat
+
+    inner_team = RoundRobinGroupChat([agent1, agent2])
+
+    som_agent = SocietyOfMindAgent(
+        name="team",
+        group_chat=inner_team,
+        description="Coordinated team of specialists"
+    )
+    ```
+
+    <ParamField path="name" type="str" required>
+      Agent name
+    </ParamField>
+
+    <ParamField path="group_chat" type="BaseGroupChat" required>
+      Internal team configuration
+    </ParamField>
+
+    <ParamField path="description" type="str" required>
+      Agent description
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="MessageFilterAgent" icon="filter">
+    Agent that filters messages based on configurable criteria.
+
+    ```python
+    from autogen_agentchat.agents import MessageFilterAgent, PerSourceFilter
+
+    filter_agent = MessageFilterAgent(
+        name="filter",
+        filter_config=PerSourceFilter(max_messages_per_source=3),
+        description="Limits messages per source"
+    )
+    ```
+
+    <ParamField path="name" type="str" required>
+      Agent name
+    </ParamField>
+
+    <ParamField path="filter_config" type="MessageFilterConfig" required>
+      Filter configuration
+    </ParamField>
+
+    <ParamField path="description" type="str" required>
+      Agent description
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="BaseChatAgent" icon="message">
+    Base class for all chat agents in the framework.
+
+    ```python
+    from autogen_agentchat.agents import BaseChatAgent
+    from autogen_agentchat.messages import ChatMessage, Response
+
+    class CustomAgent(BaseChatAgent):
+        async def on_messages(
+            self,
+            messages: Sequence[ChatMessage],
+            cancellation_token: CancellationToken | None = None
+        ) -> Response:
+            # Custom message handling
+            return Response(
+                chat_message=TextMessage(content="Response", source=self.name)
+            )
+    ```
+
+    <ParamField path="name" type="str" required>
+      Agent name
+    </ParamField>
+
+    <ParamField path="description" type="str" required>
+      Agent description
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Team Classes
+
+<AccordionGroup>
+  <Accordion title="RoundRobinGroupChat" icon="rotate">
+    Team where agents take turns in a fixed order.
+
+    ```python
+    from autogen_agentchat.teams import RoundRobinGroupChat
+    from autogen_agentchat.conditions import MaxMessageTermination
+
+    team = RoundRobinGroupChat(
+        participants=[agent1, agent2, agent3],
+        termination_condition=MaxMessageTermination(20)
+    )
+
+    result = await team.run(task="Solve this problem collaboratively")
+    ```
+
+    <ParamField path="participants" type="List[BaseChatAgent]" required>
+      List of agents in the team
+    </ParamField>
+
+    <ParamField path="termination_condition" type="TerminationCondition | None">
+      Condition to stop the conversation
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="SelectorGroupChat" icon="hand-pointer">
+    Team with dynamic agent selection using an LLM.
+
+    ```python
+    from autogen_agentchat.teams import SelectorGroupChat
+    from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+    team = SelectorGroupChat(
+        participants=[researcher, writer, reviewer],
+        model_client=OpenAIChatCompletionClient(model="gpt-4"),
+        termination_condition=MaxMessageTermination(30)
+    )
+
+    result = await team.run(task="Research and write an article")
+    ```
+
+    <ParamField path="participants" type="List[BaseChatAgent]" required>
+      Agents available for selection
+    </ParamField>
+
+    <ParamField path="model_client" type="ChatCompletionClient" required>
+      LLM for selecting the next speaker
+    </ParamField>
+
+    <ParamField path="selector_prompt" type="str | None">
+      Custom prompt for agent selection
+    </ParamField>
+
+    <ParamField path="allow_repeated_speaker" type="bool">
+      Whether the same agent can speak twice in a row (default: False)
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="Swarm" icon="bees">
+    Dynamic team with agent handoffs and context transfer.
+
+    ```python
+    from autogen_agentchat.teams import Swarm
+
+    team = Swarm(
+        participants=[triage_agent, specialist1, specialist2],
+        termination_condition=TextMentionTermination("TERMINATE")
+    )
+
+    # Agents can transfer control using handoffs
+    result = await team.run(task="Handle customer request")
+    ```
+
+    <ParamField path="participants" type="List[BaseChatAgent]" required>
+      Agents in the swarm
+    </ParamField>
+
+    <ParamField path="termination_condition" type="TerminationCondition | None">
+      Condition to stop execution
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="MagenticOneGroupChat" icon="magnet">
+    Specialized team for the Magentic-One architecture.
+
+    ```python
+    from autogen_agentchat.teams import MagenticOneGroupChat
+
+    team = MagenticOneGroupChat(
+        participants=[orchestrator, web_surfer, file_surfer, coder, executor],
+        max_turns=50
+    )
+    ```
+
+    <ParamField path="participants" type="List[BaseChatAgent]" required>
+      Specialized agents for the Magentic-One pattern
+    </ParamField>
+
+    <ParamField path="max_turns" type="int">
+      Maximum conversation turns
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="GraphFlow" icon="diagram-project">
+    Graph-based team with custom agent flow.
+
+    ```python
+    from autogen_agentchat.teams import DiGraphBuilder, GraphFlow
+
+    # Build agent graph
+    builder = DiGraphBuilder()
+    builder.add_node("start", agent1)
+    builder.add_node("process", agent2)
+    builder.add_node("end", agent3)
+    builder.add_edge("start", "process")
+    builder.add_edge("process", "end")
+
+    graph = builder.build()
+    team = GraphFlow(graph=graph, entry_point="start")
+
+    result = await team.run(task="Process through pipeline")
+    ```
+
+    <ParamField path="graph" type="DiGraph" required>
+      Directed graph of agents
+    </ParamField>
+
+    <ParamField path="entry_point" type="str" required>
+      Starting node identifier
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="BaseGroupChat" icon="users">
+    Base class for all team implementations.
+
+    ```python
+    from autogen_agentchat.teams import BaseGroupChat
+
+    class CustomTeam(BaseGroupChat):
+        async def run(
+            self,
+            task: str | ChatMessage,
+            termination_condition: TerminationCondition | None = None
+        ) -> TaskResult:
+            # Custom team logic
+            pass
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Message Types
+
+<AccordionGroup>
+  <Accordion title="TextMessage" icon="text">
+    Plain text message.
+
+    ```python
+    from autogen_agentchat.messages import TextMessage
+
+    message = TextMessage(
+        content="Hello, how can I help?",
+        source="assistant"
+    )
+    ```
+
+    <ParamField path="content" type="str" required>
+      Message text content
+    </ParamField>
+
+    <ParamField path="source" type="str" required>
+      Name of the agent that created the message
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="HandoffMessage" icon="handshake">
+    Message indicating agent handoff.
+
+    ```python
+    from autogen_agentchat.messages import HandoffMessage
+
+    handoff = HandoffMessage(
+        target="specialist",
+        content="Transferring to specialist for details",
+        source="triage"
+    )
+    ```
+
+    <ParamField path="target" type="str" required>
+      Name of the agent to transfer to
+    </ParamField>
+
+    <ParamField path="content" type="str" required>
+      Context for the handoff
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="ToolCallSummaryMessage" icon="wrench">
+    Summary of tool execution results.
+
+    ```python
+    from autogen_agentchat.messages import ToolCallSummaryMessage
+
+    summary = ToolCallSummaryMessage(
+        content="Executed calculator: 25 * 4 = 100",
+        source="assistant"
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="StructuredMessage" icon="table">
+    Message with structured data.
+
+    ```python
+    from autogen_agentchat.messages import StructuredMessage
+    from pydantic import BaseModel
+
+    class Report(BaseModel):
+        title: str
+        summary: str
+        score: float
+
+    message = StructuredMessage[
+        content=Report(title="Analysis", summary="...", score=0.95),
+        source="analyst"
+    ]
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Events
+
+<AccordionGroup>
+  <Accordion title="ToolCallRequestEvent" icon="phone">
+    Event emitted when a tool is called.
+
+    ```python
+    from autogen_agentchat.messages import ToolCallRequestEvent
+
+    # Emitted during streaming
+    event = ToolCallRequestEvent(
+        source="assistant",
+        tool_calls=[FunctionCall(id="1", name="calc", arguments={})]
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="ToolCallExecutionEvent" icon="gear">
+    Event emitted after tool execution.
+
+    ```python
+    from autogen_agentchat.messages import ToolCallExecutionEvent
+
+    event = ToolCallExecutionEvent(
+        source="assistant",
+        tool_call_id="call_123",
+        result="100"
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="ModelClientStreamingChunkEvent" icon="stream">
+    Streaming chunk from the model.
+
+    ```python
+    from autogen_agentchat.messages import ModelClientStreamingChunkEvent
+
+    # Emitted during streaming responses
+    event = ModelClientStreamingChunkEvent(
+        source="assistant",
+        content="Hello"
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="ThoughtEvent" icon="lightbulb">
+    Agent's internal reasoning.
+
+    ```python
+    from autogen_agentchat.messages import ThoughtEvent
+
+    event = ThoughtEvent(
+        source="assistant",
+        thought="I should use the calculator tool for this"
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Response Types
+
+<AccordionGroup>
+  <Accordion title="Response" icon="reply">
+    Agent response to messages.
+
+    ```python
+    from autogen_agentchat.base import Response
+
+    response = Response(
+        chat_message=TextMessage(content="Done", source="assistant"),
+        inner_messages=[event1, event2]
+    )
+    ```
+
+    <ResponseField name="chat_message" type="ChatMessage">
+      The final response message
+    </ResponseField>
+
+    <ResponseField name="inner_messages" type="List[BaseAgentEvent]">
+      Intermediate events and messages
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="TaskResult" icon="check">
+    Result of running an agent or team.
+
+    ```python
+    result = await agent.run(task="Write code")
+
+    print(result.messages)  # All messages
+    print(result.stop_reason)  # Why it stopped
+    ```
+
+    <ResponseField name="messages" type="List[ChatMessage]">
+      Complete conversation history
+    </ResponseField>
+
+    <ResponseField name="stop_reason" type="str | None">
+      Reason for termination
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Termination Conditions
+
+<AccordionGroup>
+  <Accordion title="MaxMessageTermination" icon="hashtag">
+    Stop after a maximum number of messages.
+
+    ```python
+    from autogen_agentchat.conditions import MaxMessageTermination
+
+    condition = MaxMessageTermination(max_messages=20)
+    ```
+  </Accordion>
+
+  <Accordion title="TextMentionTermination" icon="text">
+    Stop when specific text is mentioned.
+
+    ```python
+    from autogen_agentchat.conditions import TextMentionTermination
+
+    condition = TextMentionTermination("TERMINATE")
+    ```
+  </Accordion>
+
+  <Accordion title="StopMessageTermination" icon="stop">
+    Stop on a specific message type.
+
+    ```python
+    from autogen_agentchat.conditions import StopMessageTermination
+
+    condition = StopMessageTermination()
+    ```
+  </Accordion>
+
+  <Accordion title="TimeoutTermination" icon="clock">
+    Stop after a time limit.
+
+    ```python
+    from autogen_agentchat.conditions import TimeoutTermination
+
+    condition = TimeoutTermination(timeout_seconds=300)
+    ```
+  </Accordion>
+
+  <Accordion title="TokenUsageTermination" icon="coins">
+    Stop after token budget is exhausted.
+
+    ```python
+    from autogen_agentchat.conditions import TokenUsageTermination
+
+    condition = TokenUsageTermination(max_tokens=10000)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## State Management
+
+<AccordionGroup>
+  <Accordion title="AssistantAgentState" icon="database">
+    Serializable state for assistant agents.
+
+    ```python
+    # Save state
+    state = await assistant.save_state()
+
+    # Load state
+    await assistant.load_state(state)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Logging
+
+```python
+from autogen_agentchat import TRACE_LOGGER_NAME, EVENT_LOGGER_NAME
+import logging
+
+# Configure logging
+logging.getLogger(TRACE_LOGGER_NAME).setLevel(logging.DEBUG)
+logging.getLogger(EVENT_LOGGER_NAME).setLevel(logging.INFO)
+```
+
+<ResponseField name="TRACE_LOGGER_NAME" type="str">
+  Logger name: `"autogen_agentchat"`
+</ResponseField>
+
+<ResponseField name="EVENT_LOGGER_NAME" type="str">
+  Logger name: `"autogen_agentchat.events"`
+</ResponseField>
+
+## See Also
+
+- [autogen_core](/api/python/core) - Core agent runtime and messaging
+- [autogen_ext](/api/python/extensions) - Model clients and extensions

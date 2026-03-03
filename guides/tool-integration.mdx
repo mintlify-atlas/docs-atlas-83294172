@@ -1,0 +1,552 @@
+---
+title: Integrating Tools with Agents
+description: Learn how to equip AutoGen agents with tools, functions, and external APIs for enhanced capabilities
+---
+
+# Integrating Tools with Agents
+
+AutoGen agents can use tools to interact with external systems, execute code, search databases, and more. Learn how to integrate tools effectively.
+
+## Basic Tool Integration
+
+The simplest way to add tools is by passing Python functions to agents:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.messages import TextMessage
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_core import CancellationToken
+
+
+def get_weather(city: str) -> str:
+    """Get the current weather for a city.
+    
+    Args:
+        city: Name of the city
+        
+    Returns:
+        Weather description
+    """
+    # In production, call real weather API
+    return f"The weather in {city} is 72°F and sunny."
+
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    agent = AssistantAgent(
+        name="assistant",
+        system_message="You help users with weather information.",
+        model_client=model_client,
+        tools=[get_weather],  # Pass function directly
+        reflect_on_tool_use=True  # Agent reflects on results
+    )
+    
+    response = await agent.on_messages(
+        [TextMessage(content="What's the weather in Seattle?", source="user")],
+        CancellationToken()
+    )
+    
+    print(response.chat_message.content)
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Async Tools
+
+Tools can be async for I/O operations:
+
+```python
+import httpx
+
+async def fetch_url(url: str) -> str:
+    """Fetch content from a URL.
+    
+    Args:
+        url: The URL to fetch
+        
+    Returns:
+        Page content
+    """
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.text[:500]  # First 500 chars
+
+
+async def search_database(query: str) -> str:
+    """Search the knowledge database.
+    
+    Args:
+        query: Search query
+        
+    Returns:
+        Search results
+    """
+    # Simulate async database query
+    await asyncio.sleep(0.1)
+    return f"Results for '{query}': [Document 1, Document 2]"
+
+
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[fetch_url, search_database],  # Mix of async tools
+    reflect_on_tool_use=True
+)
+```
+
+## Tool Call Behavior
+
+Control how agents handle tool calls:
+
+### Reflect on Tool Use
+
+When `reflect_on_tool_use=True`, the agent makes another LLM call to generate a natural language response:
+
+```python
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[get_weather],
+    reflect_on_tool_use=True  # Agent generates response from tool results
+)
+# User: "What's the weather in Seattle?"
+# Agent internally calls get_weather("Seattle")
+# Agent responds: "The weather in Seattle is currently 72°F and sunny."
+```
+
+### Direct Tool Results
+
+When `reflect_on_tool_use=False`, tool results are returned directly:
+
+```python
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[get_weather],
+    reflect_on_tool_use=False  # Return raw tool results
+)
+# User: "What's the weather in Seattle?"
+# Agent returns: ToolCallSummaryMessage with raw results
+```
+
+### Multiple Tool Iterations
+
+Control how many tool call rounds an agent can make:
+
+```python
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[search_web, analyze_data, fetch_url],
+    max_tool_iterations=3,  # Up to 3 rounds of tool calls
+    reflect_on_tool_use=True
+)
+# Agent can chain: search_web -> fetch_url -> analyze_data
+```
+
+## Function Tool Class
+
+For more control, use the `FunctionTool` class:
+
+```python
+from autogen_core.tools import FunctionTool
+
+def calculate_total(items: list[float], tax_rate: float = 0.08) -> float:
+    """Calculate total price with tax.
+    
+    Args:
+        items: List of item prices
+        tax_rate: Tax rate (default 0.08)
+        
+    Returns:
+        Total price including tax
+    """
+    subtotal = sum(items)
+    return subtotal * (1 + tax_rate)
+
+# Create FunctionTool explicitly
+calc_tool = FunctionTool(
+    func=calculate_total,
+    name="calculate_total",
+    description="Calculate total price with tax for a list of items"
+)
+
+agent = AssistantAgent(
+    name="calculator",
+    model_client=model_client,
+    tools=[calc_tool]
+)
+```
+
+## Structured Tool Inputs
+
+Use Pydantic models for complex tool inputs:
+
+```python
+from pydantic import BaseModel, Field
+from typing import List
+
+class SearchQuery(BaseModel):
+    """Search parameters"""
+    query: str = Field(description="Search query string")
+    max_results: int = Field(default=10, description="Maximum results")
+    filters: List[str] = Field(default_factory=list, description="Result filters")
+
+def search_documents(params: SearchQuery) -> str:
+    """Search documents with structured parameters.
+    
+    Args:
+        params: Search parameters
+        
+    Returns:
+        Search results
+    """
+    return f"Found {params.max_results} results for '{params.query}'"
+
+agent = AssistantAgent(
+    name="search_assistant",
+    model_client=model_client,
+    tools=[search_documents]
+)
+```
+
+## Tools in Multi-Agent Teams
+
+Different agents can have different tools:
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+
+def search_web(query: str) -> str:
+    """Search the web."""
+    return f"Web results for: {query}"
+
+def query_database(sql: str) -> str:
+    """Query the database."""
+    return f"Database results for: {sql}"
+
+def analyze_sentiment(text: str) -> str:
+    """Analyze text sentiment."""
+    return "Sentiment: Positive"
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Agent with web search tool
+    researcher = AssistantAgent(
+        name="researcher",
+        description="Searches web for information",
+        model_client=model_client,
+        tools=[search_web],
+        reflect_on_tool_use=True
+    )
+
+    # Agent with database tool
+    data_analyst = AssistantAgent(
+        name="data_analyst",
+        description="Queries databases",
+        model_client=model_client,
+        tools=[query_database],
+        reflect_on_tool_use=True
+    )
+
+    # Agent with analysis tool
+    sentiment_analyst = AssistantAgent(
+        name="sentiment_analyst",
+        description="Analyzes sentiment",
+        model_client=model_client,
+        tools=[analyze_sentiment],
+        reflect_on_tool_use=True
+    )
+
+    team = SelectorGroupChat(
+        [researcher, data_analyst, sentiment_analyst],
+        model_client=model_client,
+        termination_condition=MaxMessageTermination(15)
+    )
+
+    result = await team.run(
+        task="Research customer feedback and analyze sentiment"
+    )
+```
+
+<Note>
+In v0.4, you don't need a separate executor agent for tools. The `AssistantAgent` calls and executes tools automatically.
+</Note>
+
+## Code Execution
+
+For code execution, use `CodeExecutorAgent`:
+
+```python
+from autogen_agentchat.agents import CodeExecutorAgent
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+from autogen_agentchat.teams import RoundRobinGroupChat
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Agent that writes code
+    coder = AssistantAgent(
+        name="coder",
+        system_message="Write Python code to solve problems.",
+        model_client=model_client,
+    )
+
+    # Agent that executes code
+    executor = CodeExecutorAgent(
+        name="executor",
+        code_executor=LocalCommandLineCodeExecutor(work_dir="./coding")
+    )
+
+    team = RoundRobinGroupChat(
+        [coder, executor],
+        termination_condition=MaxMessageTermination(10)
+    )
+
+    result = await team.run(
+        task="Write and run Python code to calculate factorial of 10"
+    )
+```
+
+## Docker Code Execution
+
+Execute code in isolated Docker containers:
+
+```python
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+executor_agent = CodeExecutorAgent(
+    name="docker_executor",
+    code_executor=DockerCommandLineCodeExecutor(
+        image="python:3.11-slim",
+        work_dir="/workspace",
+        timeout=60
+    )
+)
+```
+
+## Custom Tool Results
+
+Return rich tool results:
+
+```python
+from autogen_core.tools import ToolResult, TextResultContent, ImageResultContent
+from autogen_core import Image
+
+async def generate_chart(data: str) -> ToolResult:
+    """Generate a chart from data.
+    
+    Args:
+        data: Data to visualize
+        
+    Returns:
+        Chart image and description
+    """
+    # Generate chart (simplified)
+    chart_path = "/tmp/chart.png"
+    # ... create chart ...
+    
+    return ToolResult(
+        content=[
+            TextResultContent(text="Generated chart successfully"),
+            ImageResultContent(image=Image.from_file(chart_path))
+        ]
+    )
+
+agent = AssistantAgent(
+    name="chart_agent",
+    model_client=model_client,
+    tools=[generate_chart]
+)
+```
+
+## Error Handling in Tools
+
+Handle errors gracefully:
+
+```python
+def safe_divide(a: float, b: float) -> str:
+    """Safely divide two numbers.
+    
+    Args:
+        a: Numerator
+        b: Denominator
+        
+    Returns:
+        Result or error message
+    """
+    try:
+        if b == 0:
+            return "Error: Division by zero"
+        result = a / b
+        return f"Result: {result}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+agent = AssistantAgent(
+    name="calculator",
+    model_client=model_client,
+    tools=[safe_divide],
+    reflect_on_tool_use=True  # Agent can respond to errors
+)
+```
+
+## Tool Call Summary Format
+
+Customize how tool results are formatted:
+
+```python
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[get_weather, search_web],
+    reflect_on_tool_use=False,
+    tool_call_summary_format="Tool '{tool_name}' returned: {result}"  # Custom format
+)
+```
+
+## Parallel Tool Calls
+
+By default, multiple tool calls execute in parallel:
+
+```python
+# Agent can call multiple tools simultaneously
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[search_web, fetch_url, query_db],
+    # Parallel calls enabled by default
+)
+
+# Disable parallel calls
+model_client = OpenAIChatCompletionClient(
+    model="gpt-4o",
+    parallel_tool_calls=False  # Tools called sequentially
+)
+```
+
+## Best Practices
+
+<Steps>
+
+### Write Clear Tool Descriptions
+
+Provide detailed docstrings - they're used in the LLM prompt:
+
+```python
+def fetch_user_data(user_id: int) -> str:
+    """Fetch detailed user information from the database.
+    
+    Use this tool when you need complete user profile data including
+    preferences, settings, and activity history.
+    
+    Args:
+        user_id: The unique user identifier (integer)
+        
+    Returns:
+        JSON string containing user profile data
+    """
+    pass
+```
+
+### Handle Failures Gracefully
+
+Return informative error messages:
+
+```python
+def api_call(endpoint: str) -> str:
+    try:
+        response = requests.get(endpoint, timeout=10)
+        response.raise_for_status()
+        return response.text
+    except requests.Timeout:
+        return "Error: Request timed out after 10 seconds"
+    except requests.HTTPError as e:
+        return f"Error: HTTP {e.response.status_code}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+```
+
+### Use Type Hints
+
+Type hints improve tool schema generation:
+
+```python
+from typing import List, Optional
+
+def search(
+    query: str,
+    limit: int = 10,
+    filters: Optional[List[str]] = None
+) -> str:
+    """Search with proper type hints."""
+    pass
+```
+
+### Consider Token Usage
+
+Tool results consume tokens - keep them concise:
+
+```python
+def fetch_large_data(query: str) -> str:
+    data = get_data(query)  # Potentially large
+    # Summarize instead of returning everything
+    return f"Found {len(data)} records. Sample: {data[:100]}..."
+```
+
+### Use Reflect Appropriately
+
+- `reflect_on_tool_use=True`: For user-facing agents needing natural responses
+- `reflect_on_tool_use=False`: For intermediate agents in workflows
+
+</Steps>
+
+<Warning>
+Be cautious with code execution tools. Always use Docker or sandboxed environments for untrusted code.
+</Warning>
+
+## Advanced: Custom Tool Classes
+
+Implement custom tool classes for complex behavior:
+
+```python
+from autogen_core.tools import BaseTool, ParametersSchema, ToolSchema
+from typing import Any, Dict
+
+class StatefulTool(BaseTool):
+    """A tool that maintains state across calls."""
+    
+    def __init__(self):
+        self._call_count = 0
+    
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="stateful_counter",
+            description="Counts how many times it's been called",
+            parameters=ParametersSchema(type="object", properties={})
+        )
+    
+    async def call(self, args: Dict[str, Any]) -> str:
+        self._call_count += 1
+        return f"Called {self._call_count} times"
+
+tool = StatefulTool()
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[tool]
+)
+```
+
+## Related Resources
+
+- [MCP Servers](/guides/mcp-servers) - Connect to MCP protocol servers
+- [Custom Agents](/guides/custom-agents) - Build agents with custom tool handling
+- [Multi-Agent Workflows](/guides/multi-agent-workflows) - Use tools in teams

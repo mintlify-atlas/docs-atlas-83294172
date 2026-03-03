@@ -1,0 +1,480 @@
+---
+title: 'AutoGen Extensions'
+description: '.NET extensions and integrations for AutoGen'
+icon: 'puzzle-piece'
+---
+
+Extensions, integrations, and deployment options for AutoGen .NET applications.
+
+## Microsoft.Extensions.AI Integration
+
+<AccordionGroup>
+  <Accordion title="IChatClient" icon="comments">
+    Microsoft.Extensions.AI chat client interface.
+
+    ```csharp
+    using Microsoft.Extensions.AI;
+    using Microsoft.Extensions.DependencyInjection;
+
+    var services = new ServiceCollection();
+
+    // Add OpenAI chat client
+    services.AddChatClient(builder => builder
+        .UseOpenAI("gpt-4", apiKey));
+
+    var chatClient = services.BuildServiceProvider()
+        .GetRequiredService<IChatClient>();
+
+    // Use with InferenceAgent
+    var agent = new InferenceAgent<TaskMessage>(
+        id,
+        runtime,
+        "Assistant",
+        logger,
+        chatClient
+    );
+    ```
+
+    <ResponseField name="GetResponseAsync" type="Task<ChatResponse>">
+      Generate a chat completion
+
+      <ParamField path="messages" type="IList<ChatMessage>" required>
+        Conversation messages
+      </ParamField>
+
+      <ParamField path="options" type="ChatOptions?">
+        Generation options (temperature, max tokens, etc.)
+      </ParamField>
+
+      <ParamField path="cancellationToken" type="CancellationToken">
+        Cancellation token
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="GetStreamingResponseAsync" type="IAsyncEnumerable<ChatResponseUpdate>">
+      Stream chat completion updates
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="ChatOptions" icon="sliders">
+    Configuration for chat completions.
+
+    ```csharp
+    var options = new ChatOptions
+    {
+        Temperature = 0.7f,
+        MaxTokens = 2000,
+        TopP = 0.9f,
+        FrequencyPenalty = 0.5f,
+        PresencePenalty = 0.5f,
+        StopSequences = new[] { "STOP", "END" },
+        ModelId = "gpt-4"
+    };
+
+    var response = await chatClient.GetResponseAsync(messages, options);
+    ```
+
+    <ParamField path="Temperature" type="float?">
+      Sampling temperature (0.0 to 2.0)
+    </ParamField>
+
+    <ParamField path="MaxTokens" type="int?">
+      Maximum tokens in response
+    </ParamField>
+
+    <ParamField path="TopP" type="float?">
+      Nucleus sampling parameter
+    </ParamField>
+
+    <ParamField path="FrequencyPenalty" type="float?">
+      Frequency penalty (-2.0 to 2.0)
+    </ParamField>
+
+    <ParamField path="PresencePenalty" type="float?">
+      Presence penalty (-2.0 to 2.0)
+    </ParamField>
+
+    <ParamField path="StopSequences" type="IList<string>?">
+      Stop sequences
+    </ParamField>
+
+    <ParamField path="ModelId" type="string?">
+      Override model identifier
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="ChatMessage" icon="message">
+    Message in a conversation.
+
+    ```csharp
+    using Microsoft.Extensions.AI;
+
+    var messages = new List<ChatMessage>
+    {
+        new ChatMessage(ChatRole.System, "You are helpful."),
+        new ChatMessage(ChatRole.User, "Hello!"),
+        new ChatMessage(ChatRole.Assistant, "Hi! How can I help?"),
+        new ChatMessage(ChatRole.User, "Tell me a joke.")
+    };
+    ```
+
+    <ParamField path="Role" type="ChatRole" required>
+      Message role (System, User, Assistant, Tool)
+    </ParamField>
+
+    <ParamField path="Content" type="string" required>
+      Message content
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Semantic Kernel Integration
+
+<AccordionGroup>
+  <Accordion title="SemanticKernelHostingExtensions" icon="brain">
+    Integration with Semantic Kernel.
+
+    ```csharp
+    using Microsoft.AutoGen.Extensions.SemanticKernel;
+    using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.SemanticKernel;
+
+    var builder = Host.CreateApplicationBuilder();
+
+    // Add Semantic Kernel
+    builder.Services.AddSemanticKernel()
+        .AddOpenAIChatCompletion("gpt-4", apiKey);
+
+    // Add SK-powered agents
+    builder.Services.AddSemanticKernelAgents();
+
+    var host = builder.Build();
+    ```
+  </Accordion>
+
+  <Accordion title="QdrantOptions" icon="database">
+    Configuration for Qdrant vector database.
+
+    ```csharp
+    using Microsoft.AutoGen.Extensions.SemanticKernel.Options;
+
+    builder.Services.Configure<QdrantOptions>(options =>
+    {
+        options.Endpoint = "http://localhost:6333";
+        options.ApiKey = "your-api-key";
+        options.CollectionName = "agent_memory";
+        options.VectorSize = 1536;
+    });
+    ```
+
+    <ParamField path="Endpoint" type="string" required>
+      Qdrant server endpoint
+    </ParamField>
+
+    <ParamField path="ApiKey" type="string?">
+      API key for authentication
+    </ParamField>
+
+    <ParamField path="CollectionName" type="string" required>
+      Collection name for vectors
+    </ParamField>
+
+    <ParamField path="VectorSize" type="int" required>
+      Dimension of embedding vectors
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Microsoft.Extensions.AI (MEAI)
+
+<AccordionGroup>
+  <Accordion title="MEAIHostingExtensions" icon="microsoft">
+    Hosting extensions for Microsoft.Extensions.AI.
+
+    ```csharp
+    using Microsoft.AutoGen.Extensions.MEAI;
+    using Microsoft.Extensions.DependencyInjection;
+
+    var builder = Host.CreateApplicationBuilder();
+
+    // Configure chat completion services
+    builder.Services.AddChatClient(config =>
+    {
+        config.UseOpenAI("gpt-4", apiKey);
+        config.UseLogging();
+        config.UseDistributedCaching();
+    });
+
+    var host = builder.Build();
+    ```
+  </Accordion>
+
+  <Accordion title="AIClientOptions" icon="gear">
+    Configuration for AI clients.
+
+    ```csharp
+    using Microsoft.AutoGen.Extensions.MEAI.Options;
+
+    builder.Services.Configure<AIClientOptions>(options =>
+    {
+        options.Endpoint = "https://api.openai.com";
+        options.ApiKey = "sk-...";
+        options.DefaultModel = "gpt-4";
+        options.Timeout = TimeSpan.FromSeconds(30);
+        options.MaxRetries = 3;
+    });
+    ```
+
+    <ParamField path="Endpoint" type="string" required>
+      API endpoint URL
+    </ParamField>
+
+    <ParamField path="ApiKey" type="string" required>
+      API key for authentication
+    </ParamField>
+
+    <ParamField path="DefaultModel" type="string" required>
+      Default model identifier
+    </ParamField>
+
+    <ParamField path="Timeout" type="TimeSpan">
+      Request timeout
+    </ParamField>
+
+    <ParamField path="MaxRetries" type="int">
+      Maximum retry attempts
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="ServiceCollectionChatCompletionExtensions" icon="puzzle">
+    Extension methods for adding chat completion services.
+
+    ```csharp
+    services.AddChatCompletionClient<OpenAIChatClient>(config =>
+    {
+        config.ApiKey = "sk-...";
+        config.Model = "gpt-4";
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Aspire Integration
+
+<AccordionGroup>
+  <Accordion title="AspireHostingExtensions" icon="cloud">
+    .NET Aspire integration for cloud-native deployment.
+
+    ```csharp
+    using Microsoft.AutoGen.Extensions.Aspire;
+
+    var builder = DistributedApplication.CreateBuilder(args);
+
+    // Add AutoGen runtime
+    var runtime = builder.AddAutoGenRuntime("runtime")
+        .WithReplicas(3);
+
+    // Add agent services
+    builder.AddProject<Projects.WorkerAgents>("workers")
+        .WithReference(runtime);
+
+    builder.AddProject<Projects.AgentGateway>("gateway")
+        .WithReference(runtime)
+        .WithExternalHttpEndpoints();
+
+    var app = builder.Build();
+    await app.RunAsync();
+    ```
+
+    <ResponseField name="AddAutoGenRuntime" type="method">
+      Add AutoGen runtime to the application model
+
+      <ParamField path="name" type="string" required>
+        Runtime service name
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="WithReplicas" type="method">
+      Configure number of runtime replicas
+
+      <ParamField path="count" type="int" required>
+        Number of replicas
+      </ParamField>
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## gRPC Runtime
+
+<AccordionGroup>
+  <Accordion title="GrpcAgentRuntime" icon="network-wired">
+    Distributed runtime using gRPC for inter-process communication.
+
+    ```csharp
+    using Microsoft.AutoGen.Core.Grpc;
+
+    // Server side
+    var builder = WebApplication.CreateBuilder();
+    builder.Services.AddGrpc();
+    builder.Services.AddAutoGenGrpcRuntime();
+
+    var app = builder.Build();
+    app.MapGrpcService<GrpcGatewayService>();
+    await app.RunAsync();
+
+    // Client side
+    var channel = GrpcChannel.ForAddress("http://localhost:50051");
+    var runtime = new GrpcAgentRuntime(channel);
+
+    await runtime.SendMessageAsync(
+        message: "Task",
+        recipient: new AgentId("worker", "instance1")
+    );
+    ```
+  </Accordion>
+
+  <Accordion title="GrpcGateway" icon="gateway">
+    Gateway service for gRPC-based agent communication.
+
+    ```csharp
+    using Microsoft.AutoGen.RuntimeGateway.Grpc;
+
+    var builder = WebApplication.CreateBuilder();
+    builder.Services.AddGrpcGateway();
+
+    var app = builder.Build();
+    app.MapGrpcGateway();
+    await app.RunAsync();
+    ```
+  </Accordion>
+
+  <Accordion title="IAgentRuntimeExtensions" icon="plug">
+    Extension methods for agent runtime.
+
+    ```csharp
+    using Microsoft.AutoGen.Core.Grpc;
+
+    // Send and wait for response
+    var result = await runtime.SendAndAwaitResponseAsync(
+        message: request,
+        recipient: agentId,
+        timeout: TimeSpan.FromSeconds(30)
+    );
+
+    // Broadcast to all agents of a type
+    await runtime.BroadcastAsync(
+        message: notification,
+        agentType: "worker"
+    );
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Orleans Integration
+
+<AccordionGroup>
+  <Accordion title="OrleansRuntimeHostingExtensions" icon="grain">
+    Microsoft Orleans integration for distributed agents.
+
+    ```csharp
+    using Microsoft.AutoGen.RuntimeGateway.Grpc.Services.Orleans;
+
+    var builder = WebApplication.CreateBuilder();
+
+    builder.Services.AddOrleansAgentRuntime(siloBuilder =>
+    {
+        siloBuilder.UseLocalhostClustering();
+        siloBuilder.AddMemoryGrainStorage("PubSubStore");
+    });
+
+    var app = builder.Build();
+    await app.RunAsync();
+    ```
+  </Accordion>
+
+  <Accordion title="RegistryGrain" icon="list">
+    Orleans grain for agent registry.
+
+    ```csharp
+    // Automatic registration via Orleans
+    // Tracks all active agents in the cluster
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Serialization
+
+<AccordionGroup>
+  <Accordion title="ProtobufMessageSerializer" icon="binary">
+    Protocol Buffers serialization for messages.
+
+    ```csharp
+    using Microsoft.AutoGen.Core.Grpc;
+
+    var serializer = new ProtobufMessageSerializer();
+
+    // Serialize
+    var bytes = serializer.Serialize(message);
+
+    // Deserialize
+    var message = serializer.Deserialize<TaskMessage>(bytes);
+    ```
+  </Accordion>
+
+  <Accordion title="CloudEventExtensions" icon="cloud">
+    CloudEvents format support.
+
+    ```csharp
+    using Microsoft.AutoGen.Core.Grpc;
+
+    var cloudEvent = message.ToCloudEvent(
+        source: "agent/worker",
+        type: "autogen.task"
+    );
+
+    var message = cloudEvent.ToMessage<TaskMessage>();
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: Complete gRPC Setup
+
+```csharp
+using Microsoft.AutoGen.Core;
+using Microsoft.AutoGen.Core.Grpc;
+using Microsoft.AutoGen.Contracts;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Grpc.Net.Client;
+
+// Server (Gateway)
+var serverBuilder = WebApplication.CreateBuilder();
+serverBuilder.Services.AddGrpc();
+serverBuilder.Services.AddAutoGenGrpcRuntime();
+
+var server = serverBuilder.Build();
+server.MapGrpcService<GrpcGatewayService>();
+await server.StartAsync();
+
+// Worker (Agent Host)
+var workerBuilder = Host.CreateApplicationBuilder();
+var channel = GrpcChannel.ForAddress("http://localhost:50051");
+var runtime = new GrpcAgentRuntime(channel);
+
+workerBuilder.Services.AddSingleton<IAgentRuntime>(runtime);
+workerBuilder.Services.AddTransient<WorkerAgent>();
+
+var worker = workerBuilder.Build();
+
+await runtime.RegisterAgentFactoryAsync(
+    new AgentType("worker"),
+    async (id, rt) => new WorkerAgent(id, rt)
+);
+
+await worker.RunAsync();
+```
+
+## See Also
+
+- [Microsoft.AutoGen.Core](/api/dotnet/core) - Core runtime and contracts
+- [Microsoft.AutoGen.Agents](/api/dotnet/agents) - Pre-built agent implementations

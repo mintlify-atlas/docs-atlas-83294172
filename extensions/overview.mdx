@@ -1,0 +1,233 @@
+---
+title: Extensions Overview
+description: Extend AutoGen with custom model clients, code executors, and tools
+---
+
+AutoGen Extensions (`autogen-ext`) provide modular components that extend the core framework with support for different LLM providers, code execution environments, and tool integrations.
+
+## Architecture
+
+The extensions package follows a plugin architecture where each component type implements a specific interface:
+
+```python
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+from autogen_ext.tools.mcp import McpWorkbench
+
+# Components are composable and interchangeable
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+code_executor = DockerCommandLineCodeExecutor()
+workbench = McpWorkbench(server_params=params)
+```
+
+## Extension Categories
+
+AutoGen extensions are organized into four main categories:
+
+<CardGroup cols={2}>
+  <Card title="Model Clients" icon="brain" href="/extensions/model-clients">
+    Connect to OpenAI, Anthropic, Azure, Ollama, Gemini, Mistral, and more
+  </Card>
+  <Card title="Code Executors" icon="code" href="/extensions/code-executors">
+    Execute code safely in Docker containers, Jupyter notebooks, or locally
+  </Card>
+  <Card title="Tools" icon="wrench" href="/extensions/tools">
+    Integrate MCP servers, HTTP APIs, LangChain tools, and GraphRAG
+  </Card>
+  <Card title="Custom Extensions" icon="puzzle-piece" href="/extensions/custom-extensions">
+    Build your own extensions following AutoGen's component model
+  </Card>
+</CardGroup>
+
+## Installation
+
+Extensions are installed with optional dependencies based on what you need:
+
+<CodeGroup>
+```bash OpenAI
+pip install "autogen-ext[openai]"
+```
+
+```bash Anthropic
+pip install "autogen-ext[anthropic]"
+```
+
+```bash Docker
+pip install "autogen-ext[docker]"
+```
+
+```bash MCP
+pip install "autogen-ext[mcp]"
+```
+
+```bash All Extensions
+pip install "autogen-ext[all]"
+```
+</CodeGroup>
+
+## Component Model
+
+All extensions implement the AutoGen component model, which provides:
+
+### Configuration Serialization
+
+Components can be serialized to/from configuration:
+
+```python
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+# Create from configuration
+config = {
+    "model": "gpt-4o",
+    "api_key": "sk-...",
+    "temperature": 0.7
+}
+client = OpenAIChatCompletionClient(**config)
+
+# Export configuration
+exported_config = client._to_config()
+```
+
+### Lifecycle Management
+
+Components support async lifecycle methods:
+
+```python
+# Start component
+await executor.start()
+
+try:
+    # Use component
+    result = await executor.execute_code_blocks(blocks, token)
+finally:
+    # Clean up resources
+    await executor.stop()
+```
+
+### Context Manager Support
+
+Many components can be used as async context managers:
+
+```python
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+params = StdioServerParams(command="uvx", args=["mcp-server-fetch"])
+
+async with McpWorkbench(server_params=params) as workbench:
+    tools = await workbench.list_tools()
+    result = await workbench.call_tool(tools[0]["name"], {"url": "https://example.com"})
+```
+
+## Available Extensions
+
+### Model Clients
+
+| Provider | Client Class | Models |
+|----------|-------------|--------|
+| OpenAI | `OpenAIChatCompletionClient` | GPT-4, GPT-3.5, o1, o3 |
+| Azure OpenAI | `AzureOpenAIChatCompletionClient` | GPT-4, GPT-3.5 |
+| Anthropic | `AnthropicChatCompletionClient` | Claude 3.5 Sonnet, Claude 3 Opus |
+| AWS Bedrock | `AnthropicBedrockChatCompletionClient` | Claude via Bedrock |
+| Azure AI | `AzureAIChatCompletionClient` | Azure AI models |
+| Ollama | `OllamaChatCompletionClient` | Llama, Mistral, Qwen |
+| Llama.cpp | `LlamaCppChatCompletionClient` | Local GGUF models |
+
+### Code Executors
+
+| Executor | Description | Safety |
+|----------|-------------|--------|
+| `DockerCommandLineCodeExecutor` | Execute code in Docker containers | High |
+| `DockerJupyterCodeExecutor` | Jupyter notebook in Docker | High |
+| `LocalCommandLineCodeExecutor` | Execute code locally | Low |
+| `JupyterCodeExecutor` | Local Jupyter execution | Medium |
+
+### Tool Integrations
+
+| Integration | Description |
+|-------------|-------------|
+| `McpWorkbench` | Model Context Protocol servers |
+| `HttpTool` | HTTP/REST API endpoints |
+| `LangChainToolAdapter` | Wrap LangChain tools |
+| `GlobalSearchTool` | GraphRAG global search |
+| `LocalSearchTool` | GraphRAG local search |
+
+## Best Practices
+
+### Use Type Hints
+
+Leverage Python's type system for better IDE support:
+
+```python
+from autogen_core.models import ChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+def create_client() -> ChatCompletionClient:
+    return OpenAIChatCompletionClient(model="gpt-4o")
+```
+
+### Handle Cancellation
+
+Always pass and respect `CancellationToken`:
+
+```python
+from autogen_core import CancellationToken
+
+async def execute_with_timeout(executor, code_blocks):
+    token = CancellationToken()
+    try:
+        result = await executor.execute_code_blocks(code_blocks, token)
+        return result
+    except asyncio.TimeoutError:
+        token.cancel()
+        raise
+```
+
+### Dispose Resources Properly
+
+Use context managers or explicit cleanup:
+
+```python
+# Preferred: context manager
+async with DockerCommandLineCodeExecutor() as executor:
+    result = await executor.execute_code_blocks(blocks, token)
+
+# Alternative: explicit lifecycle
+executor = DockerCommandLineCodeExecutor()
+await executor.start()
+try:
+    result = await executor.execute_code_blocks(blocks, token)
+finally:
+    await executor.stop()
+```
+
+### Configure Logging
+
+Extensions use AutoGen's event and trace logging:
+
+```python
+import logging
+from autogen_core import EVENT_LOGGER_NAME, TRACE_LOGGER_NAME
+
+# Enable event logging (LLM calls, tool executions)
+logging.getLogger(EVENT_LOGGER_NAME).setLevel(logging.INFO)
+
+# Enable trace logging (detailed internals)
+logging.getLogger(TRACE_LOGGER_NAME).setLevel(logging.DEBUG)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Clients" icon="brain" href="/extensions/model-clients">
+    Learn how to configure different LLM providers
+  </Card>
+  <Card title="Code Executors" icon="code" href="/extensions/code-executors">
+    Set up safe code execution environments
+  </Card>
+  <Card title="Tools" icon="wrench" href="/extensions/tools">
+    Integrate external tools and APIs
+  </Card>
+  <Card title="Custom Extensions" icon="puzzle-piece" href="/extensions/custom-extensions">
+    Create your own custom extensions
+  </Card>
+</CardGroup>

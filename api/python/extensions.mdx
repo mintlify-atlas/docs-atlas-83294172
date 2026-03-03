@@ -1,0 +1,573 @@
+---
+title: 'autogen_ext'
+description: 'Extensions and model integrations for AutoGen'
+icon: 'puzzle-piece'
+---
+
+The `autogen_ext` package provides model clients, integrations, and extensions for AutoGen.
+
+## Model Clients
+
+<AccordionGroup>
+  <Accordion title="OpenAIChatCompletionClient" icon="openai">
+    Client for OpenAI chat completion models.
+
+    ```python
+    from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+    client = OpenAIChatCompletionClient(
+        model="gpt-4o",
+        api_key="sk-...",
+        temperature=0.7,
+        max_tokens=1000
+    )
+
+    # Use with agents
+    from autogen_agentchat.agents import AssistantAgent
+
+    agent = AssistantAgent(
+        name="assistant",
+        model_client=client,
+        description="GPT-4 powered assistant"
+    )
+    ```
+
+    <ParamField path="model" type="str" required>
+      Model identifier (e.g., "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo")
+    </ParamField>
+
+    <ParamField path="api_key" type="str | None">
+      OpenAI API key (defaults to OPENAI_API_KEY env var)
+    </ParamField>
+
+    <ParamField path="base_url" type="str | None">
+      Custom API base URL
+    </ParamField>
+
+    <ParamField path="temperature" type="float | None">
+      Sampling temperature (0.0 to 2.0)
+    </ParamField>
+
+    <ParamField path="max_tokens" type="int | None">
+      Maximum tokens in response
+    </ParamField>
+
+    <ParamField path="top_p" type="float | None">
+      Nucleus sampling parameter
+    </ParamField>
+
+    <ParamField path="timeout" type="float | None">
+      Request timeout in seconds
+    </ParamField>
+
+    <ParamField path="organization" type="str | None">
+      OpenAI organization ID
+    </ParamField>
+
+    ### Methods
+
+    <ResponseField name="create" type="async method">
+      Generate a chat completion
+
+      ```python
+      from autogen_core.models import UserMessage
+
+      result = await client.create(
+          messages=[UserMessage(content="Hello!", source="user")],
+          temperature=0.8
+      )
+      print(result.content)
+      ```
+
+      Returns: `CreateResult`
+    </ResponseField>
+
+    <ResponseField name="create_stream" type="async generator">
+      Stream chat completion chunks
+
+      ```python
+      async for chunk in client.create_stream(messages=messages):
+          if chunk.content:
+              print(chunk.content, end="", flush=True)
+      ```
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="AzureOpenAIChatCompletionClient" icon="microsoft">
+    Client for Azure OpenAI Service.
+
+    ```python
+    from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+
+    client = AzureOpenAIChatCompletionClient(
+        model="gpt-4",
+        azure_endpoint="https://your-resource.openai.azure.com",
+        api_key="your-api-key",
+        api_version="2024-02-15-preview",
+        azure_deployment="gpt-4-deployment"
+    )
+    ```
+
+    <ParamField path="model" type="str" required>
+      Model identifier
+    </ParamField>
+
+    <ParamField path="azure_endpoint" type="str" required>
+      Azure OpenAI resource endpoint
+    </ParamField>
+
+    <ParamField path="api_key" type="str | None">
+      Azure OpenAI API key (or use Azure AD auth)
+    </ParamField>
+
+    <ParamField path="api_version" type="str" required>
+      Azure OpenAI API version
+    </ParamField>
+
+    <ParamField path="azure_deployment" type="str" required>
+      Deployment name in Azure
+    </ParamField>
+
+    <ParamField path="azure_ad_token" type="str | None">
+      Azure Active Directory token
+    </ParamField>
+
+    <ParamField path="azure_ad_token_provider" type="Callable | None">
+      Function to provide Azure AD tokens
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="AnthropicChatCompletionClient" icon="a">
+    Client for Anthropic Claude models.
+
+    ```python
+    from autogen_ext.models.anthropic import AnthropicChatCompletionClient
+
+    client = AnthropicChatCompletionClient(
+        model="claude-3-5-sonnet-20241022",
+        api_key="sk-ant-...",
+        max_tokens=4096
+    )
+    ```
+
+    <ParamField path="model" type="str" required>
+      Model name (e.g., "claude-3-5-sonnet-20241022", "claude-3-opus-20240229")
+    </ParamField>
+
+    <ParamField path="api_key" type="str" required>
+      Anthropic API key
+    </ParamField>
+
+    <ParamField path="max_tokens" type="int">
+      Maximum tokens in response (required for Anthropic)
+    </ParamField>
+
+    <ParamField path="temperature" type="float | None">
+      Sampling temperature
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="OllamaChatCompletionClient" icon="llama">
+    Client for local Ollama models.
+
+    ```python
+    from autogen_ext.models.ollama import OllamaChatCompletionClient
+
+    client = OllamaChatCompletionClient(
+        model="llama3.1:8b",
+        base_url="http://localhost:11434"
+    )
+    ```
+
+    <ParamField path="model" type="str" required>
+      Ollama model name
+    </ParamField>
+
+    <ParamField path="base_url" type="str">
+      Ollama server URL (default: "http://localhost:11434")
+    </ParamField>
+
+    <ParamField path="temperature" type="float | None">
+      Sampling temperature
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="SemanticKernelChatCompletionClient" icon="brain">
+    Client using Semantic Kernel integration.
+
+    ```python
+    from autogen_ext.models.semantic_kernel import SemanticKernelChatCompletionClient
+    from semantic_kernel import Kernel
+
+    kernel = Kernel()
+    # Configure kernel...
+
+    client = SemanticKernelChatCompletionClient(
+        kernel=kernel,
+        service_id="chat-gpt"
+    )
+    ```
+
+    <ParamField path="kernel" type="Kernel" required>
+      Semantic Kernel instance
+    </ParamField>
+
+    <ParamField path="service_id" type="str" required>
+      Service identifier in the kernel
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="LlamaCppChatCompletionClient" icon="c">
+    Client for llama.cpp models.
+
+    ```python
+    from autogen_ext.models.llama_cpp import LlamaCppChatCompletionClient
+
+    client = LlamaCppChatCompletionClient(
+        model_path="/path/to/model.gguf",
+        n_ctx=4096,
+        n_gpu_layers=35
+    )
+    ```
+
+    <ParamField path="model_path" type="str" required>
+      Path to GGUF model file
+    </ParamField>
+
+    <ParamField path="n_ctx" type="int">
+      Context window size
+    </ParamField>
+
+    <ParamField path="n_gpu_layers" type="int">
+      Number of layers to offload to GPU
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="ReplayChatCompletionClient" icon="repeat">
+    Client that replays recorded responses for testing.
+
+    ```python
+    from autogen_ext.models.replay import ReplayChatCompletionClient
+
+    client = ReplayChatCompletionClient(
+        responses=[
+            "First response",
+            "Second response",
+            "Third response"
+        ]
+    )
+
+    # Useful for testing and deterministic behavior
+    ```
+
+    <ParamField path="responses" type="List[str]" required>
+      Pre-recorded responses to replay in order
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Model Configuration
+
+<AccordionGroup>
+  <Accordion title="OpenAIClientConfiguration" icon="gear">
+    Configuration dataclass for OpenAI clients.
+
+    ```python
+    from autogen_ext.models.openai import OpenAIClientConfiguration
+
+    config = OpenAIClientConfiguration(
+        model="gpt-4o",
+        api_key="sk-...",
+        temperature=0.7,
+        max_tokens=2000
+    )
+
+    # Use with component system
+    client = OpenAIChatCompletionClient.from_config(config)
+    ```
+  </Accordion>
+
+  <Accordion title="AzureOpenAIClientConfiguration" icon="gear">
+    Configuration for Azure OpenAI clients.
+
+    ```python
+    from autogen_ext.models.openai import AzureOpenAIClientConfiguration
+
+    config = AzureOpenAIClientConfiguration(
+        model="gpt-4",
+        azure_endpoint="https://your-resource.openai.azure.com",
+        api_version="2024-02-15-preview",
+        azure_deployment="gpt-4-deployment"
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Caching
+
+<AccordionGroup>
+  <Accordion title="CachedChatCompletionClient" icon="database">
+    Wrapper that caches model responses.
+
+    ```python
+    from autogen_ext.models.cache import CachedChatCompletionClient
+    from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+    base_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    cached_client = CachedChatCompletionClient(
+        client=base_client,
+        cache_dir=".autogen_cache"
+    )
+
+    # First call hits the API
+    result1 = await cached_client.create(messages=messages)
+
+    # Second identical call uses cache
+    result2 = await cached_client.create(messages=messages)
+    ```
+
+    <ParamField path="client" type="ChatCompletionClient" required>
+      Underlying model client to cache
+    </ParamField>
+
+    <ParamField path="cache_dir" type="str">
+      Directory for cache storage (default: ".autogen_cache")
+    </ParamField>
+
+    <ParamField path="cache_seed" type="int | None">
+      Seed for cache key generation
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Code Execution
+
+<AccordionGroup>
+  <Accordion title="DockerCommandLineCodeExecutor" icon="docker">
+    Execute code in Docker containers.
+
+    ```python
+    from autogen_ext.code_executors import DockerCommandLineCodeExecutor
+
+    executor = DockerCommandLineCodeExecutor(
+        image="python:3.11",
+        timeout=60,
+        work_dir="/workspace"
+    )
+
+    result = await executor.execute_code_blocks(
+        code_blocks=[
+            ("python", "print('Hello from Docker!')")
+        ]
+    )
+    ```
+
+    <ParamField path="image" type="str">
+      Docker image to use (default: "python:3.11-slim")
+    </ParamField>
+
+    <ParamField path="timeout" type="int">
+      Execution timeout in seconds
+    </ParamField>
+
+    <ParamField path="work_dir" type="str">
+      Working directory in container
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="LocalCommandLineCodeExecutor" icon="terminal">
+    Execute code locally (use with caution).
+
+    ```python
+    from autogen_ext.code_executors import LocalCommandLineCodeExecutor
+
+    executor = LocalCommandLineCodeExecutor(
+        timeout=30,
+        work_dir="./code_execution"
+    )
+
+    # WARNING: Executes code on your local machine
+    result = await executor.execute_code_blocks(
+        code_blocks=[("python", "print('Hello')")]
+    )
+    ```
+
+    <ParamField path="timeout" type="int">
+      Execution timeout in seconds
+    </ParamField>
+
+    <ParamField path="work_dir" type="str">
+      Working directory for execution
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Tools & Extensions
+
+<AccordionGroup>
+  <Accordion title="WebSearchTool" icon="search">
+    Tool for web searching.
+
+    ```python
+    from autogen_ext.tools import WebSearchTool
+
+    search_tool = WebSearchTool(
+        api_key="your-search-api-key",
+        max_results=5
+    )
+
+    # Use with AssistantAgent
+    agent = AssistantAgent(
+        name="researcher",
+        model_client=client,
+        tools=[search_tool],
+        description="Research assistant with web search"
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="FileTools" icon="file">
+    Tools for file operations.
+
+    ```python
+    from autogen_ext.tools import FileReadTool, FileWriteTool
+
+    read_tool = FileReadTool(allowed_paths=["/data"])
+    write_tool = FileWriteTool(allowed_paths=["/output"])
+
+    agent = AssistantAgent(
+        name="file_handler",
+        model_client=client,
+        tools=[read_tool, write_tool],
+        description="Agent with file access"
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Memory Extensions
+
+<AccordionGroup>
+  <Accordion title="VectorMemory" icon="database">
+    Vector-based semantic memory.
+
+    ```python
+    from autogen_ext.memory import VectorMemory
+    from autogen_ext.models.openai import OpenAIEmbeddingClient
+
+    memory = VectorMemory(
+        embedding_client=OpenAIEmbeddingClient(model="text-embedding-3-small"),
+        collection_name="agent_memory",
+        top_k=5
+    )
+
+    # Use with AssistantAgent
+    agent = AssistantAgent(
+        name="assistant",
+        model_client=client,
+        memory=[memory],
+        description="Assistant with semantic memory"
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="RedisMemory" icon="server">
+    Redis-backed persistent memory.
+
+    ```python
+    from autogen_ext.memory import RedisMemory
+
+    memory = RedisMemory(
+        redis_url="redis://localhost:6379",
+        namespace="agent_memory"
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Runtimes & Deployment
+
+<AccordionGroup>
+  <Accordion title="GrpcAgentRuntime" icon="network-wired">
+    Distributed runtime using gRPC.
+
+    ```python
+    from autogen_ext.runtimes.grpc import GrpcAgentRuntime
+
+    runtime = GrpcAgentRuntime(
+        host="0.0.0.0",
+        port=50051
+    )
+
+    await runtime.start()
+    ```
+  </Accordion>
+
+  <Accordion title="CloudRuntime" icon="cloud">
+    Cloud-based runtime for distributed agents.
+
+    ```python
+    from autogen_ext.runtimes.cloud import CloudRuntime
+
+    runtime = CloudRuntime(
+        project_id="my-project",
+        region="us-central1"
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Utilities
+
+<AccordionGroup>
+  <Accordion title="RateLimiter" icon="gauge">
+    Rate limiting for API calls.
+
+    ```python
+    from autogen_ext.utils import RateLimiter
+
+    limiter = RateLimiter(max_calls=100, time_window=60)
+
+    async with limiter:
+        result = await client.create(messages=messages)
+    ```
+  </Accordion>
+
+  <Accordion title="TokenCounter" icon="calculator">
+    Count tokens for cost estimation.
+
+    ```python
+    from autogen_ext.utils import TokenCounter
+
+    counter = TokenCounter(model="gpt-4")
+    tokens = counter.count_messages(messages)
+    print(f"Estimated cost: ${tokens * 0.00003}")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Configuration Models
+
+All model clients support declarative configuration through the component system:
+
+```python
+from autogen_core import ComponentModel
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+# Create from config
+config = ComponentModel(
+    component_type="OpenAIChatCompletionClient",
+    config={
+        "model": "gpt-4o",
+        "temperature": 0.7
+    }
+)
+
+client = OpenAIChatCompletionClient.from_config(config)
+```
+
+## See Also
+
+- [autogen_core](/api/python/core) - Core runtime and messaging
+- [autogen_agentchat](/api/python/agentchat) - High-level agent framework

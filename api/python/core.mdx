@@ -1,0 +1,651 @@
+---
+title: 'autogen_core'
+description: 'Core Python API reference for building distributed multi-agent systems'
+icon: 'cube'
+---
+
+The `autogen_core` package provides the foundational components for building distributed, event-driven multi-agent systems.
+
+## Agent Classes
+
+<AccordionGroup>
+  <Accordion title="BaseAgent" icon="robot">
+    Base class for implementing agents with message handling capabilities.
+
+    ```python
+    from autogen_core import BaseAgent, AgentId, AgentRuntime, MessageContext
+
+    class MyAgent(BaseAgent):
+        def __init__(self, agent_id: AgentId, runtime: AgentRuntime):
+            super().__init__(agent_id, runtime)
+    ```
+
+    <ParamField path="agent_id" type="AgentId" required>
+      Unique identifier for the agent instance
+    </ParamField>
+
+    <ParamField path="runtime" type="AgentRuntime" required>
+      Runtime environment for message passing and agent coordination
+    </ParamField>
+
+    <ResponseField name="id" type="AgentId">
+      Returns the agent's unique identifier
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="RoutedAgent" icon="route">
+    Decorator-based agent with automatic message routing.
+
+    ```python
+    from autogen_core import RoutedAgent, message_handler, rpc
+    from dataclasses import dataclass
+
+    @dataclass
+    class TaskMessage:
+        task: str
+
+    class WorkerAgent(RoutedAgent):
+        @message_handler
+        async def handle_task(self, message: TaskMessage, ctx: MessageContext) -> str:
+            return f"Completed: {message.task}"
+
+        @rpc
+        async def get_status(self) -> dict:
+            return {"status": "ready"}
+    ```
+
+    <ParamField path="description" type="str">
+      Optional description of the agent's capabilities
+    </ParamField>
+
+    ### Decorators
+
+    <ParamField path="@message_handler" type="decorator">
+      Marks a method as a handler for published messages of the parameter type
+    </ParamField>
+
+    <ParamField path="@rpc" type="decorator">
+      Marks a method as an RPC endpoint for direct invocation
+    </ParamField>
+
+    <ParamField path="@event" type="decorator">
+      Marks a method as an event handler
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="ClosureAgent" icon="code">
+    Agent implementation using closure functions for simple message handling.
+
+    ```python
+    from autogen_core import ClosureAgent, ClosureContext
+
+    async def my_handler(ctx: ClosureContext, message: str) -> str:
+        await ctx.send_message("processed", recipient_id)
+        return "Done"
+
+    agent = ClosureAgent("my_agent", my_handler, runtime)
+    ```
+
+    <ParamField path="name" type="str" required>
+      Agent name identifier
+    </ParamField>
+
+    <ParamField path="handler" type="Callable" required>
+      Async function to handle incoming messages
+    </ParamField>
+
+    <ParamField path="runtime" type="AgentRuntime" required>
+      Runtime environment
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Runtime & Messaging
+
+<AccordionGroup>
+  <Accordion title="AgentRuntime" icon="server">
+    Protocol defining the runtime environment for agent execution and communication.
+
+    ```python
+    from autogen_core import AgentRuntime, AgentId, TopicId
+
+    async def example(runtime: AgentRuntime):
+        # Send direct message
+        response = await runtime.send_message(
+            message="Hello",
+            recipient=AgentId("worker", "default")
+        )
+
+        # Publish to topic
+        await runtime.publish_message(
+            message={"event": "started"},
+            topic_id=TopicId("events", "default")
+        )
+    ```
+
+    ### Methods
+
+    <ResponseField name="send_message" type="async method">
+      Send a message to a specific agent and await response
+
+      <ParamField path="message" type="Any" required>
+        The message payload to send
+      </ParamField>
+
+      <ParamField path="recipient" type="AgentId" required>
+        Target agent identifier
+      </ParamField>
+
+      <ParamField path="sender" type="AgentId | None">
+        Sender agent identifier (None for external)
+      </ParamField>
+
+      <ParamField path="cancellation_token" type="CancellationToken | None">
+        Token to cancel the operation
+      </ParamField>
+
+      <ParamField path="message_id" type="str | None">
+        Unique message identifier
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="publish_message" type="async method">
+      Publish a message to all subscribers of a topic
+
+      <ParamField path="message" type="Any" required>
+        The message payload
+      </ParamField>
+
+      <ParamField path="topic_id" type="TopicId" required>
+        Topic to publish to
+      </ParamField>
+
+      <ParamField path="sender" type="AgentId | None">
+        Sender agent identifier
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="register_factory" type="async method">
+      Register an agent factory for dynamic agent creation
+
+      <ParamField path="type" type="str | AgentType" required>
+        Unique agent type identifier
+      </ParamField>
+
+      <ParamField path="agent_factory" type="Callable" required>
+        Factory function that creates agent instances
+      </ParamField>
+
+      <ParamField path="expected_class" type="type[Agent] | None">
+        Expected agent class for type checking
+      </ParamField>
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="SingleThreadedAgentRuntime" icon="microchip">
+    In-process runtime for single-threaded agent execution.
+
+    ```python
+    from autogen_core import SingleThreadedAgentRuntime, TypeSubscription
+
+    runtime = SingleThreadedAgentRuntime()
+
+    # Register agent type
+    await runtime.register_factory(
+        type="worker",
+        agent_factory=lambda: WorkerAgent(),
+        expected_class=WorkerAgent
+    )
+
+    # Add subscription
+    await runtime.add_subscription(
+        TypeSubscription(topic_type="tasks", agent_type="worker")
+    )
+
+    # Start runtime
+    runtime.start()
+    ```
+
+    <ResponseField name="start" type="method">
+      Start the runtime message processing loop
+    </ResponseField>
+
+    <ResponseField name="stop" type="async method">
+      Gracefully stop the runtime
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="MessageContext" icon="message">
+    Context information for message handling.
+
+    ```python
+    from autogen_core import MessageContext
+
+    @message_handler
+    async def handle(self, message: str, ctx: MessageContext) -> None:
+        print(f"From: {ctx.sender}")
+        print(f"Topic: {ctx.topic_id}")
+        print(f"Message ID: {ctx.message_id}")
+    ```
+
+    <ResponseField name="sender" type="AgentId | None">
+      Identifier of the message sender
+    </ResponseField>
+
+    <ResponseField name="topic_id" type="TopicId | None">
+      Topic the message was published to
+    </ResponseField>
+
+    <ResponseField name="message_id" type="str">
+      Unique message identifier
+    </ResponseField>
+
+    <ResponseField name="cancellation_token" type="CancellationToken">
+      Token for cancelling operations
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Identity & Types
+
+<AccordionGroup>
+  <Accordion title="AgentId" icon="id-card">
+    Unique identifier for an agent instance.
+
+    ```python
+    from autogen_core import AgentId
+
+    # Create agent ID
+    agent_id = AgentId(type="worker", key="instance_1")
+
+    # Access components
+    print(agent_id.type)  # "worker"
+    print(agent_id.key)   # "instance_1"
+    ```
+
+    <ParamField path="type" type="str" required>
+      Agent type name (alphanumeric and underscores)
+    </ParamField>
+
+    <ParamField path="key" type="str" required>
+      Instance key (ASCII 32-126 characters)
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="AgentType" icon="tag">
+    Agent type definition for factory registration.
+
+    ```python
+    from autogen_core import AgentType
+
+    worker_type = AgentType("worker")
+    ```
+
+    <ParamField path="name" type="str" required>
+      Type name identifier
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="TopicId" icon="hashtag">
+    Topic identifier for pub/sub messaging.
+
+    ```python
+    from autogen_core import TopicId
+
+    topic = TopicId(type="events", source="system")
+    ```
+
+    <ParamField path="type" type="str" required>
+      Topic type
+    </ParamField>
+
+    <ParamField path="source" type="str" required>
+      Topic source namespace
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="AgentProxy" icon="link">
+    Proxy for remote agent communication.
+
+    ```python
+    from autogen_core import AgentProxy
+
+    proxy = AgentProxy(agent_id, runtime)
+    result = await proxy.send("Hello")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Subscriptions
+
+<AccordionGroup>
+  <Accordion title="TypeSubscription" icon="filter">
+    Subscribe to messages by exact type match.
+
+    ```python
+    from autogen_core import TypeSubscription
+
+    subscription = TypeSubscription(
+        topic_type="tasks",
+        agent_type="worker"
+    )
+    await runtime.add_subscription(subscription)
+    ```
+
+    <ParamField path="topic_type" type="str" required>
+      Topic type to subscribe to
+    </ParamField>
+
+    <ParamField path="agent_type" type="str" required>
+      Agent type that will receive messages
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="TypePrefixSubscription" icon="asterisk">
+    Subscribe to messages matching a type prefix.
+
+    ```python
+    from autogen_core import TypePrefixSubscription
+
+    subscription = TypePrefixSubscription(
+        topic_type_prefix="task.",
+        agent_type="worker"
+    )
+    ```
+
+    <ParamField path="topic_type_prefix" type="str" required>
+      Topic type prefix to match
+    </ParamField>
+
+    <ParamField path="agent_type" type="str" required>
+      Agent type to receive matching messages
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="DefaultSubscription" icon="inbox">
+    Subscribe to all messages in a namespace.
+
+    ```python
+    from autogen_core import DefaultSubscription
+
+    subscription = DefaultSubscription(
+        agent_type="logger"
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Serialization & Components
+
+<AccordionGroup>
+  <Accordion title="MessageSerializer" icon="code">
+    Protocol for custom message serialization.
+
+    ```python
+    from autogen_core import MessageSerializer
+
+    class MySerializer(MessageSerializer):
+        def serialize(self, message: Any) -> bytes:
+            return json.dumps(message).encode()
+
+        def deserialize(self, data: bytes, type_name: str) -> Any:
+            return json.loads(data.decode())
+    ```
+  </Accordion>
+
+  <Accordion title="Component System" icon="puzzle-piece">
+    Declarative component configuration.
+
+    ```python
+    from autogen_core import Component, ComponentModel
+
+    @Component
+    class MyComponent:
+        def __init__(self, config: dict):
+            self.value = config["value"]
+
+        def to_config(self) -> ComponentModel:
+            return ComponentModel(
+                component_type=self.__class__.__name__,
+                config={"value": self.value}
+            )
+    ```
+
+    <ResponseField name="Component" type="decorator">
+      Marks a class as a configurable component
+    </ResponseField>
+
+    <ResponseField name="ComponentModel" type="class">
+      Serializable component configuration
+
+      <ParamField path="component_type" type="str" required>
+        Component type identifier
+      </ParamField>
+
+      <ParamField path="config" type="dict" required>
+        Component configuration data
+      </ParamField>
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="Image" icon="image">
+    Image data container for multimodal messages.
+
+    ```python
+    from autogen_core import Image
+
+    # From bytes
+    image = Image.from_bytes(image_bytes, format="png")
+
+    # From file
+    image = Image.from_file("photo.jpg")
+
+    # From URL
+    image = Image.from_url("https://example.com/image.png")
+    ```
+
+    <ResponseField name="from_bytes" type="classmethod">
+      Create image from byte data
+    </ResponseField>
+
+    <ResponseField name="from_file" type="classmethod">
+      Create image from file path
+    </ResponseField>
+
+    <ResponseField name="from_url" type="classmethod">
+      Create image from URL
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## State Management
+
+<AccordionGroup>
+  <Accordion title="CacheStore" icon="database">
+    Protocol for agent state persistence.
+
+    ```python
+    from autogen_core import CacheStore
+
+    class CustomStore(CacheStore):
+        async def get(self, key: str) -> Any:
+            # Retrieve value
+            pass
+
+        async def set(self, key: str, value: Any) -> None:
+            # Store value
+            pass
+    ```
+  </Accordion>
+
+  <Accordion title="InMemoryStore" icon="memory">
+    In-memory cache store implementation.
+
+    ```python
+    from autogen_core import InMemoryStore
+
+    store = InMemoryStore()
+    await store.set("key", "value")
+    result = await store.get("key")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Intervention & Control
+
+<AccordionGroup>
+  <Accordion title="InterventionHandler" icon="hand">
+    Protocol for intercepting and modifying messages.
+
+    ```python
+    from autogen_core import InterventionHandler, MessageContext
+
+    class ApprovalHandler(InterventionHandler):
+        async def on_send(self, message: Any, ctx: MessageContext) -> Any:
+            # Review and modify message before sending
+            if needs_approval(message):
+                approved = await get_approval(message)
+                if not approved:
+                    from autogen_core import DropMessage
+                    raise DropMessage("Not approved")
+            return message
+    ```
+  </Accordion>
+
+  <Accordion title="DropMessage" icon="ban">
+    Exception to prevent message delivery.
+
+    ```python
+    from autogen_core import DropMessage
+
+    raise DropMessage("Message rejected by policy")
+    ```
+  </Accordion>
+
+  <Accordion title="CancellationToken" icon="circle-stop">
+    Token for cancelling long-running operations.
+
+    ```python
+    from autogen_core import CancellationToken
+
+    token = CancellationToken()
+
+    # Cancel after timeout
+    token.cancel_after(10.0)
+
+    # Check if cancelled
+    if token.is_cancelled:
+        return
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Telemetry
+
+<AccordionGroup>
+  <Accordion title="Tracing" icon="chart-line">
+    OpenTelemetry integration for distributed tracing.
+
+    ```python
+    from autogen_core import (
+        trace_create_agent_span,
+        trace_invoke_agent_span,
+        trace_tool_span
+    )
+
+    # Trace agent creation
+    with trace_create_agent_span(agent_type="worker"):
+        agent = WorkerAgent()
+
+    # Trace agent invocation
+    with trace_invoke_agent_span(agent_id, message_type="Task"):
+        result = await agent.handle(task)
+
+    # Trace tool execution
+    with trace_tool_span(tool_name="calculator"):
+        result = calculator.add(1, 2)
+    ```
+  </Accordion>
+
+  <Accordion title="Logging" icon="file-lines">
+    Structured logging configuration.
+
+    ```python
+    from autogen_core import ROOT_LOGGER_NAME, EVENT_LOGGER_NAME, TRACE_LOGGER_NAME
+    import logging
+
+    # Configure root logger
+    logging.getLogger(ROOT_LOGGER_NAME).setLevel(logging.INFO)
+
+    # Configure event logger for structured events
+    event_logger = logging.getLogger(EVENT_LOGGER_NAME)
+
+    # Configure trace logger for development debugging
+    trace_logger = logging.getLogger(TRACE_LOGGER_NAME)
+    ```
+
+    <ResponseField name="ROOT_LOGGER_NAME" type="str">
+      Name of the root logger: `"autogen_core"`
+    </ResponseField>
+
+    <ResponseField name="EVENT_LOGGER_NAME" type="str">
+      Name for structured event logging
+    </ResponseField>
+
+    <ResponseField name="TRACE_LOGGER_NAME" type="str">
+      Name for development trace logging
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Types & Protocols
+
+<AccordionGroup>
+  <Accordion title="FunctionCall" icon="function">
+    Represents a tool or function call.
+
+    ```python
+    from autogen_core import FunctionCall
+
+    call = FunctionCall(
+        id="call_123",
+        name="calculator",
+        arguments={"a": 1, "b": 2}
+    )
+    ```
+
+    <ParamField path="id" type="str" required>
+      Unique call identifier
+    </ParamField>
+
+    <ParamField path="name" type="str" required>
+      Function or tool name
+    </ParamField>
+
+    <ParamField path="arguments" type="dict" required>
+      Function arguments
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="UnknownPayload" icon="question">
+    Represents a message with unknown type.
+
+    ```python
+    from autogen_core import UnknownPayload
+
+    # Raised when deserializer encounters unknown type
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Constants
+
+```python
+JSON_DATA_CONTENT_TYPE = "application/json"
+PROTOBUF_DATA_CONTENT_TYPE = "application/protobuf"
+```
+
+## See Also
+
+- [autogen_agentchat](/api/python/agentchat) - High-level chat agent framework
+- [autogen_ext](/api/python/extensions) - Extensions and integrations

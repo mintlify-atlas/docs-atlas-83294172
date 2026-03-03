@@ -1,0 +1,302 @@
+---
+title: Tools
+description: Integrate tools with AgentChat agents
+icon: wrench
+---
+
+Tools extend agent capabilities beyond LLM generation. Agents can call tools to interact with external systems, execute code, search the web, and more.
+
+## Function tools
+
+The simplest way to add tools is using Python functions:
+
+```python
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+def get_weather(city: str) -> str:
+    """Get the weather for a city.
+    
+    Args:
+        city: The city name
+        
+    Returns:
+        Weather description
+    """
+    # Simulated weather lookup
+    return f"The weather in {city} is sunny, 72°F"
+
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    tools=[get_weather]  # Pass function directly
+)
+
+result = await agent.run(task="What's the weather in Paris?")
+```
+
+<Note>
+The function docstring and type hints are used to generate the tool schema for the LLM.
+</Note>
+
+## Multiple tools
+
+```python
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+agent = AssistantAgent(
+    "calculator",
+    model_client=model_client,
+    tools=[add, multiply]
+)
+```
+
+## Async tools
+
+Tools can be async functions:
+
+```python
+import aiohttp
+
+async def fetch_url(url: str) -> str:
+    """Fetch content from a URL.
+    
+    Args:
+        url: The URL to fetch
+    """
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.text()
+
+agent = AssistantAgent(
+    "web_fetcher",
+    model_client=model_client,
+    tools=[fetch_url]
+)
+```
+
+## MCP servers
+
+Model Context Protocol (MCP) servers provide reusable tool integrations:
+
+```python
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+# Configure MCP server
+server_params = StdioServerParams(
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-github"],
+    env={"GITHUB_TOKEN": "ghp_..."}
+)
+
+# Create workbench
+async with McpWorkbench(server_params) as workbench:
+    agent = AssistantAgent(
+        "github_agent",
+        model_client=model_client,
+        workbench=workbench  # All tools from MCP server
+    )
+    
+    result = await agent.run(
+        task="List issues in microsoft/autogen repository"
+    )
+```
+
+See [MCP Servers guide](/guides/mcp-servers) for more details.
+
+## Code execution
+
+Use `CodeExecutorAgent` to execute code safely:
+
+```python
+from autogen_agentchat.agents import AssistantAgent, CodeExecutorAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_ext.code_executors import DockerCommandLineCodeExecutor
+
+# Create code executor
+executor = DockerCommandLineCodeExecutor()
+code_agent = CodeExecutorAgent(
+    "executor",
+    code_executor=executor
+)
+
+# Assistant generates code, executor runs it
+assistant = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    system_message="Write Python code to solve problems."
+)
+
+team = RoundRobinGroupChat([assistant, code_agent])
+result = await team.run(task="Calculate the 10th Fibonacci number")
+```
+
+See [Code Execution example](/examples/code-execution) for a complete example.
+
+## AgentTool
+
+Wrap an agent as a tool for another agent:
+
+```python
+from autogen_agentchat.tools import AgentTool
+
+# Create specialized agents
+math_agent = AssistantAgent(
+    "math_expert",
+    model_client=model_client,
+    system_message="You are a math expert."
+)
+
+chemistry_agent = AssistantAgent(
+    "chemistry_expert",
+    model_client=model_client,
+    system_message="You are a chemistry expert."
+)
+
+# Wrap as tools
+math_tool = AgentTool(math_agent, return_value_as_last_message=True)
+chem_tool = AgentTool(chemistry_agent, return_value_as_last_message=True)
+
+# Main agent can delegate to experts
+main_agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    tools=[math_tool, chem_tool]
+)
+
+result = await main_agent.run(task="What is the molecular weight of water?")
+```
+
+## Custom tool classes
+
+For more control, create a custom tool class:
+
+```python
+from autogen_core.tools import BaseTool
+from pydantic import BaseModel, Field
+
+class WeatherInput(BaseModel):
+    city: str = Field(description="The city name")
+    units: str = Field(default="metric", description="Temperature units")
+
+class WeatherTool(BaseTool[WeatherInput, str]):
+    def __init__(self):
+        super().__init__(
+            name="get_weather",
+            description="Get current weather for a city",
+            args_type=WeatherInput,
+            return_type=str
+        )
+    
+    async def run(self, args: WeatherInput) -> str:
+        # Your weather API logic here
+        return f"Weather in {args.city}: 72°F"
+
+tool = WeatherTool()
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    tools=[tool]
+)
+```
+
+## Tool execution control
+
+### Max iterations
+
+Control how many tool-calling rounds the agent can make:
+
+```python
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    tools=[...],
+    max_tool_iterations=5  # Stop after 5 rounds of tool calls
+)
+```
+
+### Reflect on tool use
+
+Have the agent reflect on tool results before responding:
+
+```python
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    tools=[...],
+    reflect_on_tool_use=True  # Agent considers tool results
+)
+```
+
+## Tool security
+
+<Warning>
+Always validate and sanitize tool inputs, especially for tools that:
+- Execute code
+- Access file systems
+- Make network requests
+- Interact with databases
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Use Docker for code execution">
+    Always use `DockerCommandLineCodeExecutor` for untrusted code execution to provide isolation.
+  </Accordion>
+  
+  <Accordion title="Validate inputs">
+    Use Pydantic models to validate and sanitize tool inputs.
+  </Accordion>
+  
+  <Accordion title="Limit tool capabilities">
+    Give agents only the tools they need. Don't provide file system access unless required.
+  </Accordion>
+  
+  <Accordion title="Set timeouts">
+    Use timeouts for tools that make network requests or long-running operations.
+  </Accordion>
+</AccordionGroup>
+
+## Best practices
+
+1. **Clear descriptions** - Write detailed docstrings. The LLM uses them to understand when to call the tool.
+
+2. **Type hints** - Always use type hints. They're used to generate the tool schema.
+
+3. **Error handling** - Handle errors gracefully in your tools:
+
+```python
+def get_weather(city: str) -> str:
+    """Get weather for a city."""
+    try:
+        # API call
+        return result
+    except Exception as e:
+        return f"Error fetching weather: {str(e)}"
+```
+
+4. **Structured outputs** - For complex data, return structured formats (JSON, Pydantic models).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="MCP Servers" icon="server" href="/guides/mcp-servers">
+    Deep dive into MCP server integration
+  </Card>
+  <Card title="Tool Integration Guide" icon="wrench" href="/guides/tool-integration">
+    Learn advanced tool patterns
+  </Card>
+  <Card title="Code Execution" icon="code" href="/examples/code-execution">
+    See code execution in action
+  </Card>
+  <Card title="Web Browsing" icon="globe" href="/examples/web-browsing">
+    Web browsing with MCP servers
+  </Card>
+</CardGroup>

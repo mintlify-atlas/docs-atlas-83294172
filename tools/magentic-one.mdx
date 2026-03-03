@@ -1,0 +1,477 @@
+---
+title: Magentic-One
+description: Generalist multi-agent system for complex tasks
+icon: "users-gear"
+---
+
+[Magentic-One](https://aka.ms/magentic-one-blog) is a generalist multi-agent system for solving open-ended web and file-based tasks across a variety of domains. It represents a significant step forward for multi-agent systems, achieving competitive performance on numerous agentic benchmarks.
+
+<Info>
+  Magentic-One is now fully integrated into `autogen-agentchat`, providing a modular and easy-to-use interface. The original implementation based on `autogen-core` is deprecated but available [here](https://github.com/microsoft/autogen/tree/v0.4.4/python/packages/autogen-magentic-one).
+</Info>
+
+<Warning>
+  Using Magentic-One involves interacting with a digital world designed for humans, which carries inherent risks. See the [Safety Precautions](#safety-precautions) section for important security guidelines.
+</Warning>
+
+## Overview
+
+Magentic-One uses a multi-agent architecture where a lead **Orchestrator** agent manages high-level planning, directs other agents, and tracks task progress. The system autonomously adapts to dynamic web and file-system environments to solve complex tasks.
+
+<CardGroup cols={2}>
+  <Card title="Multi-Agent Architecture" icon="diagram-project">
+    Orchestrator coordinates specialized agents for different capabilities
+  </Card>
+  
+  <Card title="Web & File Tasks" icon="globe">
+    Handles open-ended tasks involving web browsing and file manipulation
+  </Card>
+  
+  <Card title="Autonomous Adaptation" icon="brain">
+    Dynamically adjusts plans based on task progress and obstacles
+  </Card>
+  
+  <Card title="Competitive Performance" icon="trophy">
+    Achieves strong results on benchmarks like GAIA and HumanEval
+  </Card>
+</CardGroup>
+
+## Installation
+
+<Steps>
+  <Step title="Install required packages">
+    ```bash
+    pip install "autogen-agentchat" "autogen-ext[magentic-one,openai]"
+    ```
+  </Step>
+  
+  <Step title="Install Playwright (for MultimodalWebSurfer)">
+    If you plan to use the web browsing agent:
+    ```bash
+    playwright install --with-deps chromium
+    ```
+  </Step>
+</Steps>
+
+## Quick Start
+
+Get started with Magentic-One in just a few lines of code:
+
+```python
+import asyncio
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.teams.magentic_one import MagenticOne
+from autogen_agentchat.ui import Console
+
+async def main():
+    client = OpenAIChatCompletionClient(model="gpt-4o")
+    m1 = MagenticOne(client=client)
+    task = "What is the UV index in Melbourne today?"
+    result = await Console(m1.run_stream(task=task))
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Architecture
+
+![Magentic-One Architecture](/images/magentic-one-architecture.png)
+
+Magentic-One consists of five specialized agents working together:
+
+### Orchestrator
+
+The lead agent responsible for:
+- Task decomposition and planning
+- Directing other agents in executing subtasks
+- Tracking overall progress
+- Taking corrective actions when needed
+
+The Orchestrator maintains two ledgers:
+- **Task Ledger**: High-level plan, facts, and educated guesses
+- **Progress Ledger**: Self-reflection on task progress at each step
+
+### WebSurfer
+
+An LLM-based agent proficient in commanding a Chromium-based web browser:
+- **Navigation**: Visit URLs, perform web searches
+- **Web Actions**: Click elements, type text, fill forms
+- **Reading**: Summarize content, answer questions about pages
+
+Uses accessibility tree and set-of-marks prompting for precise interactions.
+
+### FileSurfer
+
+An LLM-based agent for file system operations:
+- Read local files of most types (via markdown preview)
+- List directory contents
+- Navigate folder structures
+- Extract information from documents
+
+### Coder
+
+Specialized through its system prompt for:
+- Writing code to solve problems
+- Analyzing information from other agents
+- Creating new artifacts and tools
+- Implementing complex algorithms
+
+### ComputerTerminal
+
+Provides access to a console shell:
+- Execute code written by the Coder
+- Install programming libraries
+- Run system commands
+- Interact with the file system
+
+## Usage Examples
+
+### Basic Usage with MagenticOne Helper
+
+The simplest way to use Magentic-One with all agents:
+
+```python
+import asyncio
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.teams.magentic_one import MagenticOne
+from autogen_agentchat.ui import Console
+
+async def example_usage():
+    client = OpenAIChatCompletionClient(model="gpt-4o")
+    m1 = MagenticOne(client=client)
+    task = "Write a Python script to fetch data from an API."
+    result = await Console(m1.run_stream(task=task))
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(example_usage())
+```
+
+### Human-in-the-Loop Mode
+
+Add human oversight for safety-critical tasks:
+
+```python
+import asyncio
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.teams.magentic_one import MagenticOne
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+from autogen_agentchat.ui import Console
+from autogen_agentchat.agents import ApprovalRequest, ApprovalResponse
+
+def user_input_func(prompt: str) -> str:
+    """Custom input function for user interaction."""
+    return input(prompt)
+
+def approval_func(request: ApprovalRequest) -> ApprovalResponse:
+    """Request user approval before executing code."""
+    print(f"Code to execute:\n{request.code}")
+    user_input = input("Do you approve this code execution? (y/n): ").strip().lower()
+    if user_input == 'y':
+        return ApprovalResponse(approved=True, reason="User approved")
+    else:
+        return ApprovalResponse(approved=False, reason="User denied")
+
+async def example_usage_hil():
+    client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Use Docker executor for better security
+    async with DockerCommandLineCodeExecutor() as code_executor:
+        m1 = MagenticOne(
+            client=client,
+            hil_mode=True,
+            input_func=user_input_func,
+            code_executor=code_executor,
+            approval_func=approval_func
+        )
+        task = "Write a Python script to fetch data from an API."
+        result = await Console(m1.run_stream(task=task))
+        print(result)
+
+if __name__ == "__main__":
+    asyncio.run(example_usage_hil())
+```
+
+### Code Approval Without Full HIL Mode
+
+Approve only code execution while keeping the system autonomous:
+
+```python
+import asyncio
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.teams.magentic_one import MagenticOne
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+from autogen_agentchat.ui import Console
+from autogen_agentchat.agents import ApprovalRequest, ApprovalResponse
+
+def approval_func(request: ApprovalRequest) -> ApprovalResponse:
+    """Request user approval before executing code."""
+    print(f"Code to execute:\n{request.code}")
+    user_input = input("Approve? (y/n): ").strip().lower()
+    if user_input == 'y':
+        return ApprovalResponse(approved=True, reason="User approved")
+    return ApprovalResponse(approved=False, reason="User denied")
+
+async def example_usage_with_approval():
+    client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    async with DockerCommandLineCodeExecutor() as code_executor:
+        m1 = MagenticOne(
+            client=client,
+            hil_mode=False,  # No human intervention in conversation
+            code_executor=code_executor,
+            approval_func=approval_func  # But approve code execution
+        )
+        task = "Write a Python script to fetch data from an API."
+        result = await Console(m1.run_stream(task=task))
+        print(result)
+
+if __name__ == "__main__":
+    asyncio.run(example_usage_with_approval())
+```
+
+### Using MagenticOneGroupChat
+
+For more control, use `MagenticOneGroupChat` directly:
+
+```python
+import asyncio
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import MagenticOneGroupChat
+from autogen_agentchat.ui import Console
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    assistant = AssistantAgent(
+        "Assistant",
+        model_client=model_client,
+    )
+    team = MagenticOneGroupChat([assistant], model_client=model_client)
+    await Console(team.run_stream(task="Provide a proof for Fermat's Last Theorem"))
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+### Using Individual Magentic-One Agents
+
+Combine specific agents in a custom team:
+
+```python
+import asyncio
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.teams import MagenticOneGroupChat
+from autogen_agentchat.ui import Console
+from autogen_ext.agents.web_surfer import MultimodalWebSurfer
+from autogen_ext.agents.file_surfer import FileSurfer
+from autogen_ext.agents.magentic_one import MagenticOneCoderAgent
+from autogen_agentchat.agents import CodeExecutorAgent
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    surfer = MultimodalWebSurfer("WebSurfer", model_client=model_client)
+    file_surfer = FileSurfer("FileSurfer", model_client=model_client)
+    coder = MagenticOneCoderAgent("Coder", model_client=model_client)
+    terminal = CodeExecutorAgent(
+        "ComputerTerminal",
+        code_executor=LocalCommandLineCodeExecutor()
+    )
+
+    team = MagenticOneGroupChat(
+        [surfer, file_surfer, coder, terminal],
+        model_client=model_client
+    )
+    
+    await Console(team.run_stream(task="What is the UV index in Melbourne today?"))
+
+asyncio.run(main())
+```
+
+## Safety Precautions
+
+<Warning>
+  Magentic-One interacts with real web pages, executes code, and accesses files. Always follow these safety guidelines:
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="1. Use Containers" icon="docker">
+    Run all tasks in Docker containers to isolate the agents and prevent direct system attacks.
+    
+    ```python
+    from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+    
+    async with DockerCommandLineCodeExecutor() as code_executor:
+        m1 = MagenticOne(client=client, code_executor=code_executor)
+    ```
+  </Accordion>
+  
+  <Accordion title="2. Virtual Environment" icon="box">
+    Use a virtual environment to prevent agents from accessing sensitive data or system files.
+  </Accordion>
+  
+  <Accordion title="3. Monitor Logs" icon="eye">
+    Closely monitor logs during and after execution to detect and mitigate risky behavior.
+  </Accordion>
+  
+  <Accordion title="4. Human Oversight" icon="user-shield">
+    Run examples with a human in the loop to supervise agents and prevent unintended consequences.
+    
+    ```python
+    m1 = MagenticOne(
+        client=client,
+        hil_mode=True,
+        approval_func=approval_func
+    )
+    ```
+  </Accordion>
+  
+  <Accordion title="5. Limit Access" icon="lock">
+    Restrict agents' access to the internet and other resources to prevent unauthorized actions.
+  </Accordion>
+  
+  <Accordion title="6. Safeguard Data" icon="shield-halved">
+    Ensure agents do not have access to sensitive data or resources. Never share sensitive information with the agents.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Be aware that agents may occasionally attempt risky actions, such as:
+  - Recruiting humans for help
+  - Accepting cookie agreements without human involvement
+  - Following instructions from compromised web pages (prompt injection)
+  
+  Always ensure agents are monitored and operate within a controlled environment.
+</Note>
+
+## Model Recommendations
+
+Magentic-One is model-agnostic and can work with various LLMs:
+
+<CardGroup cols={2}>
+  <Card title="GPT-4o (Recommended)" icon="star">
+    Default multimodal LLM for all agents. Strong reasoning and vision capabilities.
+  </Card>
+  
+  <Card title="GPT-4o for Orchestrator" icon="brain">
+    Use a strong reasoning model for the Orchestrator agent.
+  </Card>
+  
+  <Card title="OpenAI o1-preview" icon="sparkles">
+    For advanced reasoning in Orchestrator outer loop and Coder agent.
+  </Card>
+  
+  <Card title="Heterogeneous Models" icon="layer-group">
+    Mix different models for different agents to balance cost and capabilities.
+  </Card>
+</CardGroup>
+
+### Azure OpenAI Example
+
+```python
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+
+client = AzureOpenAIChatCompletionClient(
+    azure_endpoint="https://your-endpoint.openai.azure.com/",
+    api_version="2024-02-15-preview",
+    model="gpt-4o",
+    api_key="your-api-key"
+)
+
+m1 = MagenticOne(client=client)
+```
+
+## Performance
+
+Magentic-One achieves competitive results on multiple benchmarks:
+
+- **GAIA**: Strong performance on general AI assistant tasks
+- **HumanEval**: Effective code generation capabilities
+- **AssistantBench**: Competitive across diverse assistant scenarios
+
+See the [technical report](https://arxiv.org/abs/2411.04468) for detailed benchmark results.
+
+## Orchestrator Workflow
+
+The Orchestrator uses a two-loop architecture:
+
+### Outer Loop (Task Ledger)
+1. Create initial plan for the task
+2. Gather facts and educated guesses
+3. Update plan if progress stalls
+
+### Inner Loop (Progress Ledger)
+1. Self-reflect on current progress
+2. Check if task is completed
+3. Assign subtask to appropriate agent
+4. Update progress after agent completes subtask
+5. Repeat until task is complete or replanning is needed
+
+This architecture allows Magentic-One to:
+- Dynamically adapt to obstacles
+- Recover from failures
+- Optimize agent selection based on subtask requirements
+
+## API Reference
+
+### MagenticOne
+
+<ParamField path="client" type="ChatCompletionClient" required>
+  The client used for model interactions (e.g., OpenAIChatCompletionClient)
+</ParamField>
+
+<ParamField path="hil_mode" type="bool" default="false">
+  If True, adds UserProxyAgent to enable human-in-the-loop interactions
+</ParamField>
+
+<ParamField path="input_func" type="InputFuncType" default="None">
+  Function to use for user input in human-in-the-loop mode
+</ParamField>
+
+<ParamField path="code_executor" type="CodeExecutor" default="None">
+  Code executor to use. If None, will use Docker if available, otherwise local executor.
+</ParamField>
+
+<ParamField path="approval_func" type="ApprovalFuncType" default="None">
+  Function to approve code execution before running. If None, code executes without approval.
+</ParamField>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Blog Post" icon="newspaper" href="https://aka.ms/magentic-one-blog">
+    Read the official Magentic-One announcement
+  </Card>
+  
+  <Card title="Technical Report" icon="file-pdf" href="https://arxiv.org/abs/2411.04468">
+    Full academic paper with detailed methodology
+  </Card>
+  
+  <Card title="GitHub Repository" icon="github" href="https://github.com/microsoft/autogen">
+    View source code and contribute
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="https://microsoft.github.io/autogen/stable/reference/python/autogen_ext.teams.magentic_one.html">
+    Complete API documentation
+  </Card>
+</CardGroup>
+
+## Citation
+
+If you use Magentic-One in your research, please cite:
+
+```bibtex
+@misc{fourney2024magenticonegeneralistmultiagentsolving,
+    title={Magentic-One: A Generalist Multi-Agent System for Solving Complex Tasks},
+    author={Adam Fourney and Gagan Bansal and Hussein Mozannar and Cheng Tan and Eduardo Salinas and Erkang Zhu and Friederike Niedtner and Grace Proebsting and Griffin Bassman and Jack Gerrits and Jacob Alber and Peter Chang and Ricky Loynd and Robert West and Victor Dibia and Ahmed Awadallah and Ece Kamar and Rafah Hosn and Saleema Amershi},
+    year={2024},
+    eprint={2411.04468},
+    archivePrefix={arXiv},
+    primaryClass={cs.AI},
+    url={https://arxiv.org/abs/2411.04468}
+}
+```

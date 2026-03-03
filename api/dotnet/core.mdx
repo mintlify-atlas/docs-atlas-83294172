@@ -1,0 +1,592 @@
+---
+title: 'Microsoft.AutoGen.Core'
+description: '.NET Core API reference for building distributed multi-agent systems'
+icon: 'code'
+---
+
+The `Microsoft.AutoGen.Core` namespace provides the foundational components for building distributed, event-driven multi-agent systems in .NET.
+
+## Agent Classes
+
+<AccordionGroup>
+  <Accordion title="BaseAgent" icon="robot">
+    Abstract base class for all agents in the AutoGen system.
+
+    ```csharp
+    using Microsoft.AutoGen.Core;
+    using Microsoft.AutoGen.Contracts;
+
+    public class MyAgent : BaseAgent
+    {
+        public MyAgent(
+            AgentId id,
+            IAgentRuntime runtime,
+            string description,
+            ILogger<BaseAgent>? logger = null)
+            : base(id, runtime, description, logger)
+        {
+        }
+    }
+    ```
+
+    <ParamField path="id" type="AgentId" required>
+      Unique identifier for the agent instance
+    </ParamField>
+
+    <ParamField path="runtime" type="IAgentRuntime" required>
+      Runtime environment for message passing
+    </ParamField>
+
+    <ParamField path="description" type="string" required>
+      Description of the agent's capabilities
+    </ParamField>
+
+    <ParamField path="logger" type="ILogger<BaseAgent>?">
+      Optional logger instance
+    </ParamField>
+
+    ### Properties
+
+    <ResponseField name="Id" type="AgentId">
+      Gets the unique identifier of the agent
+    </ResponseField>
+
+    <ResponseField name="Metadata" type="AgentMetadata">
+      Gets metadata associated with the agent
+    </ResponseField>
+
+    <ResponseField name="Runtime" type="IAgentRuntime">
+      Gets the runtime environment
+    </ResponseField>
+
+    ### Methods
+
+    <ResponseField name="OnMessageAsync" type="ValueTask<object?>">
+      Handles an incoming message
+
+      ```csharp
+      public async ValueTask<object?> OnMessageAsync(
+          object message,
+          MessageContext messageContext)
+      {
+          // Handle message
+          return response;
+      }
+      ```
+
+      <ParamField path="message" type="object" required>
+        The received message
+      </ParamField>
+
+      <ParamField path="messageContext" type="MessageContext" required>
+        Context information about the message
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="SendMessageAsync" type="ValueTask<object?>">
+      Send a message to another agent
+
+      ```csharp
+      var response = await SendMessageAsync(
+          message: "Hello",
+          recipient: new AgentId("worker", "default"),
+          cancellationToken: cancellationToken
+      );
+      ```
+    </ResponseField>
+
+    <ResponseField name="PublishMessageAsync" type="ValueTask">
+      Publish a message to a topic
+
+      ```csharp
+      await PublishMessageAsync(
+          message: new { Event = "Started" },
+          topic: new TopicId("events", "system")
+      );
+      ```
+    </ResponseField>
+
+    <ResponseField name="CloseAsync" type="ValueTask">
+      Called when the agent is being closed
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="InProcessRuntime" icon="microchip">
+    Single-process agent runtime for local execution.
+
+    ```csharp
+    using Microsoft.AutoGen.Core;
+
+    var runtime = new InProcessRuntime();
+
+    // Register agent factory
+    await runtime.RegisterAgentFactoryAsync(
+        type: new AgentType("worker"),
+        factoryFunc: async (id, rt) => new WorkerAgent(id, rt)
+    );
+
+    // Send message
+    var response = await runtime.SendMessageAsync(
+        message: "Task",
+        recipient: new AgentId("worker", "instance1")
+    );
+    ```
+
+    <ResponseField name="RegisterAgentFactoryAsync" type="ValueTask<AgentType>">
+      Register an agent factory function
+    </ResponseField>
+
+    <ResponseField name="SendMessageAsync" type="ValueTask<object?>">
+      Send a message to an agent
+    </ResponseField>
+
+    <ResponseField name="PublishMessageAsync" type="ValueTask">
+      Publish a message to a topic
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Contracts & Interfaces
+
+<AccordionGroup>
+  <Accordion title="IAgent" icon="file-contract">
+    Core interface for all agents.
+
+    ```csharp
+    public interface IAgent : ISaveState
+    {
+        AgentId Id { get; }
+        AgentMetadata Metadata { get; }
+        ValueTask<object?> OnMessageAsync(object message, MessageContext messageContext);
+    }
+    ```
+
+    <ResponseField name="Id" type="AgentId">
+      Gets the unique identifier of the agent
+    </ResponseField>
+
+    <ResponseField name="Metadata" type="AgentMetadata">
+      Gets metadata about the agent
+    </ResponseField>
+
+    <ResponseField name="OnMessageAsync" type="ValueTask<object?>">
+      Handles incoming messages
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="IHostableAgent" icon="server">
+    Interface for agents that can be hosted in a runtime.
+
+    ```csharp
+    public interface IHostableAgent : IAgent
+    {
+        ValueTask CloseAsync();
+    }
+    ```
+
+    <ResponseField name="CloseAsync" type="ValueTask">
+      Called when the runtime is closing
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="IAgentRuntime" icon="gears">
+    Defines the runtime environment for agents.
+
+    ```csharp
+    public interface IAgentRuntime : ISaveState
+    {
+        ValueTask<object?> SendMessageAsync(
+            object message,
+            AgentId recipient,
+            AgentId? sender = null,
+            string? messageId = null,
+            CancellationToken cancellationToken = default);
+
+        ValueTask PublishMessageAsync(
+            object message,
+            TopicId topic,
+            AgentId? sender = null,
+            string? messageId = null,
+            CancellationToken cancellationToken = default);
+
+        ValueTask<AgentType> RegisterAgentFactoryAsync(
+            AgentType type,
+            Func<AgentId, IAgentRuntime, ValueTask<IHostableAgent>> factoryFunc);
+
+        ValueTask AddSubscriptionAsync(ISubscriptionDefinition subscription);
+
+        ValueTask RemoveSubscriptionAsync(string subscriptionId);
+    }
+    ```
+
+    ### Methods
+
+    <ResponseField name="SendMessageAsync" type="ValueTask<object?>">
+      Send a message to a specific agent and await response
+
+      <ParamField path="message" type="object" required>
+        The message to send
+      </ParamField>
+
+      <ParamField path="recipient" type="AgentId" required>
+        Target agent identifier
+      </ParamField>
+
+      <ParamField path="sender" type="AgentId?">
+        Sender agent (null for external)
+      </ParamField>
+
+      <ParamField path="messageId" type="string?">
+        Unique message identifier
+      </ParamField>
+
+      <ParamField path="cancellationToken" type="CancellationToken">
+        Cancellation token
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="PublishMessageAsync" type="ValueTask">
+      Publish a message to all topic subscribers
+
+      <ParamField path="message" type="object" required>
+        The message payload
+      </ParamField>
+
+      <ParamField path="topic" type="TopicId" required>
+        Topic to publish to
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="RegisterAgentFactoryAsync" type="ValueTask<AgentType>">
+      Register an agent factory for dynamic creation
+
+      <ParamField path="type" type="AgentType" required>
+        Unique agent type
+      </ParamField>
+
+      <ParamField path="factoryFunc" type="Func<AgentId, IAgentRuntime, ValueTask<IHostableAgent>>" required>
+        Factory function
+      </ParamField>
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="IHandle<T>" icon="hand">
+    Interface for handling messages of a specific type.
+
+    ```csharp
+    using Microsoft.AutoGen.Contracts;
+
+    public class WorkerAgent : BaseAgent, IHandle<TaskMessage>
+    {
+        public async ValueTask<object?> HandleAsync(
+            TaskMessage message,
+            MessageContext context)
+        {
+            // Process task
+            return new ResultMessage { Result = "Completed" };
+        }
+    }
+    ```
+
+    <ParamField path="T" type="type parameter">
+      Message type to handle
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Identity & Types
+
+<AccordionGroup>
+  <Accordion title="AgentId" icon="id-card">
+    Unique identifier for an agent instance.
+
+    ```csharp
+    using Microsoft.AutoGen.Contracts;
+
+    // Create agent ID
+    var agentId = new AgentId(type: "worker", key: "instance_1");
+
+    // From string
+    var parsed = AgentId.FromStr("worker/instance_1");
+
+    // Convert to string
+    string str = agentId.ToString(); // "worker/instance_1"
+    ```
+
+    <ParamField path="Type" type="string" required>
+      Agent type name (alphanumeric and underscores)
+    </ParamField>
+
+    <ParamField path="Key" type="string" required>
+      Instance key (ASCII 32-126 characters)
+    </ParamField>
+
+    ### Methods
+
+    <ResponseField name="FromStr" type="static AgentId">
+      Parse from "type/key" format
+    </ResponseField>
+
+    <ResponseField name="ToString" type="string">
+      Convert to "type/key" format
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="AgentType" icon="tag">
+    Agent type definition.
+
+    ```csharp
+    using Microsoft.AutoGen.Contracts;
+
+    var workerType = new AgentType("worker");
+    ```
+
+    <ParamField path="Name" type="string" required>
+      Type name identifier
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="TopicId" icon="hashtag">
+    Topic identifier for pub/sub messaging.
+
+    ```csharp
+    using Microsoft.AutoGen.Contracts;
+
+    var topic = new TopicId(type: "events", source: "system");
+    ```
+
+    <ParamField path="Type" type="string" required>
+      Topic type
+    </ParamField>
+
+    <ParamField path="Source" type="string" required>
+      Topic source namespace
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="AgentMetadata" icon="info">
+    Metadata about an agent.
+
+    ```csharp
+    public struct AgentMetadata
+    {
+        public string Type { get; set; }
+        public string Key { get; set; }
+        public string Description { get; set; }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="AgentProxy" icon="link">
+    Proxy for remote agent communication.
+
+    ```csharp
+    var proxy = await runtime.TryGetAgentProxyAsync(agentId);
+    var result = await proxy.SendAsync("Hello");
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Messaging
+
+<AccordionGroup>
+  <Accordion title="MessageContext" icon="message">
+    Context information for message handling.
+
+    ```csharp
+    public class MessageContext
+    {
+        public AgentId? Sender { get; }
+        public TopicId? TopicId { get; }
+        public string MessageId { get; }
+    }
+    ```
+
+    <ResponseField name="Sender" type="AgentId?">
+      Identifier of the message sender
+    </ResponseField>
+
+    <ResponseField name="TopicId" type="TopicId?">
+      Topic the message was published to
+    </ResponseField>
+
+    <ResponseField name="MessageId" type="string">
+      Unique message identifier
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Subscriptions
+
+<AccordionGroup>
+  <Accordion title="TypeSubscription" icon="filter">
+    Subscribe to messages by exact type match.
+
+    ```csharp
+    using Microsoft.AutoGen.Core;
+
+    var subscription = new TypeSubscription(
+        topicType: "tasks",
+        agentType: "worker"
+    );
+
+    await runtime.AddSubscriptionAsync(subscription);
+    ```
+
+    <ParamField path="TopicType" type="string" required>
+      Topic type to subscribe to
+    </ParamField>
+
+    <ParamField path="AgentType" type="string" required>
+      Agent type that will receive messages
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="TypePrefixSubscription" icon="asterisk">
+    Subscribe to messages matching a type prefix.
+
+    ```csharp
+    var subscription = new TypePrefixSubscription(
+        topicTypePrefix: "task.",
+        agentType: "worker"
+    );
+    ```
+  </Accordion>
+
+  <Accordion title="TypeSubscriptionAttribute" icon="at">
+    Attribute for declarative subscriptions.
+
+    ```csharp
+    [TypeSubscription("tasks")]
+    public class WorkerAgent : BaseAgent, IHandle<TaskMessage>
+    {
+        // ...
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## State Management
+
+<AccordionGroup>
+  <Accordion title="ISaveState" icon="save">
+    Interface for agent state persistence.
+
+    ```csharp
+    public interface ISaveState
+    {
+        ValueTask<JsonElement> SaveStateAsync();
+        ValueTask LoadStateAsync(JsonElement state);
+    }
+    ```
+
+    <ResponseField name="SaveStateAsync" type="ValueTask<JsonElement>">
+      Save the agent's state to JSON
+    </ResponseField>
+
+    <ResponseField name="LoadStateAsync" type="ValueTask">
+      Load state from JSON
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Application Host
+
+<AccordionGroup>
+  <Accordion title="AgentsApp" icon="window">
+    Application host for agent systems.
+
+    ```csharp
+    using Microsoft.AutoGen.Core;
+
+    var app = await AgentsApp.CreateAsync();
+
+    // Register agents
+    await app.RegisterAgentAsync<WorkerAgent>("worker");
+
+    // Start the application
+    await app.StartAsync();
+    ```
+
+    <ResponseField name="CreateAsync" type="static Task<AgentsApp>">
+      Create a new agents application
+    </ResponseField>
+
+    <ResponseField name="RegisterAgentAsync" type="Task">
+      Register an agent type
+    </ResponseField>
+
+    <ResponseField name="StartAsync" type="Task">
+      Start the application
+    </ResponseField>
+
+    <ResponseField name="StopAsync" type="Task">
+      Stop the application
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Exceptions
+
+<AccordionGroup>
+  <Accordion title="CantHandleException" icon="ban">
+    Thrown when an agent cannot handle a message.
+
+    ```csharp
+    throw new CantHandleException("Unsupported message type");
+    ```
+  </Accordion>
+
+  <Accordion title="UndeliverableException" icon="envelope-open-text">
+    Thrown when a message cannot be delivered.
+
+    ```csharp
+    throw new UndeliverableException("Agent not found");
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Utilities
+
+<AccordionGroup>
+  <Accordion title="ReflectionHelper" icon="magnifying-glass">
+    Utilities for agent reflection and discovery.
+
+    ```csharp
+    using Microsoft.AutoGen.Core;
+
+    var handlers = ReflectionHelper.GetMessageHandlers(agentType);
+    ```
+  </Accordion>
+
+  <Accordion title="HandlerInvoker" icon="play">
+    Invokes message handlers dynamically.
+
+    ```csharp
+    var invoker = new HandlerInvoker(methodInfo, target);
+    var result = await invoker.InvokeAsync(message, context);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Telemetry
+
+<AccordionGroup>
+  <Accordion title="ActivitySource" icon="chart-line">
+    OpenTelemetry integration.
+
+    ```csharp
+    using System.Diagnostics;
+
+    public static readonly ActivitySource s_source =
+        new("Microsoft.AutoGen.Core.Agent");
+
+    using var activity = s_source.StartActivity("HandleMessage");
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## See Also
+
+- [Microsoft.AutoGen.Agents](/api/dotnet/agents) - Pre-built agent implementations
+- [Microsoft.AutoGen.Extensions](/api/dotnet/extensions) - Extensions and integrations

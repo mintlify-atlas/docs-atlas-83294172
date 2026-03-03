@@ -1,0 +1,725 @@
+---
+title: Tools
+description: Integrate MCP servers, HTTP APIs, LangChain tools, and GraphRAG
+---
+
+AutoGen tools extend agent capabilities by connecting to external services, APIs, and specialized search systems.
+
+## Installation
+
+Install the tools you need:
+
+<CodeGroup>
+```bash MCP
+pip install "autogen-ext[mcp]"
+```
+
+```bash HTTP
+pip install "autogen-ext[http-tool]"
+```
+
+```bash LangChain
+pip install "autogen-ext[langchain]"
+```
+
+```bash GraphRAG
+pip install "autogen-ext[graphrag]"
+```
+</CodeGroup>
+
+## MCP Servers
+
+The Model Context Protocol (MCP) provides a standardized way to connect AI systems to external tools and data sources.
+
+### McpWorkbench
+
+The `McpWorkbench` wraps MCP servers and provides access to their tools:
+
+```python
+import asyncio
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+async def main():
+    params = StdioServerParams(
+        command="uvx",
+        args=["mcp-server-fetch"],
+        read_timeout_seconds=60,
+    )
+
+    async with McpWorkbench(server_params=params) as workbench:
+        # List available tools
+        tools = await workbench.list_tools()
+        print(f"Available tools: {[t['name'] for t in tools]}")
+        
+        # Call a tool
+        result = await workbench.call_tool(
+            "fetch",
+            {"url": "https://github.com/"}
+        )
+        print(result)
+
+asyncio.run(main())
+```
+
+### Server Types
+
+MCP supports multiple server connection types:
+
+#### Stdio Servers
+
+Connect to servers running as subprocesses:
+
+```python
+from autogen_ext.tools.mcp import StdioServerParams
+
+params = StdioServerParams(
+    command="uvx",
+    args=["mcp-server-fetch"],
+    read_timeout_seconds=60,
+    env={"API_KEY": "..."},  # Optional environment variables
+)
+```
+
+<ParamField path="command" type="string" required>
+  Command to execute
+</ParamField>
+
+<ParamField path="args" type="list[string]" required>
+  Command arguments
+</ParamField>
+
+<ParamField path="read_timeout_seconds" type="float" default="30">
+  Timeout for reading from the process
+</ParamField>
+
+<ParamField path="env" type="dict[str, str]">
+  Environment variables for the process
+</ParamField>
+
+#### SSE Servers
+
+Connect to servers using Server-Sent Events:
+
+```python
+from autogen_ext.tools.mcp import SseServerParams
+
+params = SseServerParams(
+    url="https://mcp-server.example.com/sse",
+    api_key="...",
+    timeout=60,
+)
+```
+
+<ParamField path="url" type="string" required>
+  SSE endpoint URL
+</ParamField>
+
+<ParamField path="api_key" type="string">
+  Authentication API key
+</ParamField>
+
+<ParamField path="timeout" type="float" default="30">
+  Connection timeout in seconds
+</ParamField>
+
+#### Streamable HTTP Servers
+
+Connect to HTTP-based MCP servers:
+
+```python
+from autogen_ext.tools.mcp import StreamableHttpServerParams
+
+params = StreamableHttpServerParams(
+    url="https://mcp-server.example.com",
+    headers={"Authorization": "Bearer ..."},
+)
+```
+
+### Tool Overrides
+
+Customize tool names and descriptions:
+
+```python
+from autogen_core.tools import ToolOverride
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+params = StdioServerParams(
+    command="uvx",
+    args=["mcp-server-fetch"],
+)
+
+overrides = {
+    "fetch": ToolOverride(
+        name="web_fetch",
+        description="Enhanced web fetching tool with better error handling"
+    )
+}
+
+workbench = McpWorkbench(
+    server_params=params,
+    tool_overrides=overrides
+)
+```
+
+### Using with Agents
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+async def main():
+    # Set up MCP server
+    params = StdioServerParams(
+        command="uvx",
+        args=["mcp-server-fetch"],
+    )
+    
+    # Create workbench
+    workbench = McpWorkbench(server_params=params)
+    await workbench.start()
+    
+    try:
+        # Get tools from workbench
+        tools = await workbench.list_tools()
+        
+        # Create agent with MCP tools
+        agent = AssistantAgent(
+            name="assistant",
+            model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+            tools=[workbench],
+            system_message="You can fetch web pages using the available tools."
+        )
+        
+        # Use the agent
+        result = await agent.run("Fetch the GitHub homepage")
+        print(result)
+    finally:
+        await workbench.stop()
+
+asyncio.run(main())
+```
+
+### MCP Resources
+
+Access server resources:
+
+```python
+async with McpWorkbench(server_params=params) as workbench:
+    # List available resources
+    resources = await workbench.list_resources()
+    print(resources)
+    
+    # Read a resource
+    content = await workbench.read_resource("file://data.json")
+    print(content)
+```
+
+### MCP Prompts
+
+Access server prompts:
+
+```python
+async with McpWorkbench(server_params=params) as workbench:
+    # List available prompts
+    prompts = await workbench.list_prompts()
+    print(prompts)
+    
+    # Get a prompt
+    prompt = await workbench.get_prompt("analyze_code", {"language": "python"})
+    print(prompt)
+```
+
+## HTTP Tools
+
+The `HttpTool` wraps HTTP/REST APIs as AutoGen tools:
+
+### Basic Usage
+
+```python
+from autogen_ext.tools.http import HttpTool
+
+tool = HttpTool(
+    name="get_weather",
+    description="Get weather information for a city",
+    scheme="https",
+    host="api.weather.com",
+    port=443,
+    path="/v1/weather/{city}",
+    method="GET",
+    json_schema={
+        "type": "object",
+        "properties": {
+            "city": {
+                "type": "string",
+                "description": "City name"
+            }
+        },
+        "required": ["city"]
+    },
+    return_type="json",
+)
+```
+
+### Configuration Options
+
+<ParamField path="name" type="string" required>
+  Tool name
+</ParamField>
+
+<ParamField path="description" type="string">
+  Tool description
+</ParamField>
+
+<ParamField path="scheme" type="'http' | 'https'" default="http">
+  URL scheme
+</ParamField>
+
+<ParamField path="host" type="string" required>
+  API host
+</ParamField>
+
+<ParamField path="port" type="int" required>
+  API port
+</ParamField>
+
+<ParamField path="path" type="string" default="/">
+  Request path. Can include path parameters like `/{param}`
+</ParamField>
+
+<ParamField path="method" type="'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'" default="POST">
+  HTTP method
+</ParamField>
+
+<ParamField path="headers" type="dict[str, Any]">
+  Request headers
+</ParamField>
+
+<ParamField path="json_schema" type="dict[str, Any]" required>
+  JSON schema for request parameters
+</ParamField>
+
+<ParamField path="return_type" type="'text' | 'json'" default="text">
+  Response format
+</ParamField>
+
+<ParamField path="timeout" type="float" default="5.0">
+  Request timeout in seconds
+</ParamField>
+
+### Path Parameters
+
+Define path parameters in the URL:
+
+```python
+tool = HttpTool(
+    name="get_user",
+    description="Get user information",
+    scheme="https",
+    host="api.example.com",
+    port=443,
+    path="/users/{user_id}/profile",
+    method="GET",
+    json_schema={
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "string"}  # Path parameter
+        },
+        "required": ["user_id"]
+    },
+)
+```
+
+### Headers and Authentication
+
+Add authentication headers:
+
+```python
+tool = HttpTool(
+    name="api_call",
+    description="Call authenticated API",
+    scheme="https",
+    host="api.example.com",
+    port=443,
+    path="/data",
+    method="POST",
+    headers={
+        "Authorization": "Bearer YOUR_TOKEN",
+        "Content-Type": "application/json",
+    },
+    json_schema={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"}
+        }
+    },
+)
+```
+
+### Using with Agents
+
+```python
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.tools.http import HttpTool
+
+weather_tool = HttpTool(
+    name="get_weather",
+    description="Get current weather for a city",
+    scheme="https",
+    host="api.weather.com",
+    port=443,
+    path="/weather",
+    method="GET",
+    json_schema={
+        "type": "object",
+        "properties": {
+            "city": {"type": "string"}
+        },
+        "required": ["city"]
+    },
+)
+
+agent = AssistantAgent(
+    name="weather_assistant",
+    model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+    tools=[weather_tool],
+    system_message="You can check weather using the available tools."
+)
+```
+
+## LangChain Tools
+
+The `LangChainToolAdapter` wraps LangChain tools for use with AutoGen:
+
+### Basic Usage
+
+```python
+from langchain_experimental.tools.python.tool import PythonAstREPLTool
+from autogen_ext.tools.langchain import LangChainToolAdapter
+import pandas as pd
+
+# Create LangChain tool
+df = pd.read_csv("data.csv")
+langchain_tool = PythonAstREPLTool(locals={"df": df})
+
+# Wrap for AutoGen
+autogen_tool = LangChainToolAdapter(langchain_tool)
+```
+
+### Using with Agents
+
+```python
+import asyncio
+import pandas as pd
+from langchain_experimental.tools.python.tool import PythonAstREPLTool
+from autogen_ext.tools.langchain import LangChainToolAdapter
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.messages import TextMessage
+from autogen_core import CancellationToken
+
+async def main():
+    # Load data
+    df = pd.read_csv(
+        "https://raw.githubusercontent.com/pandas-dev/pandas/main/doc/data/titanic.csv"
+    )
+    
+    # Create LangChain tool
+    langchain_tool = PythonAstREPLTool(locals={"df": df})
+    
+    # Wrap for AutoGen
+    tool = LangChainToolAdapter(langchain_tool)
+    
+    # Create agent
+    agent = AssistantAgent(
+        "assistant",
+        tools=[tool],
+        model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+        system_message="Use the `df` variable to access the dataset.",
+    )
+    
+    # Use the agent
+    result = await agent.run(
+        "What's the average age of the passengers?"
+    )
+    print(result)
+
+asyncio.run(main())
+```
+
+### SQL Database Tools
+
+```python
+import asyncio
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain_community.utilities.sql_database import SQLDatabase
+from autogen_ext.tools.langchain import LangChainToolAdapter
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+async def main():
+    # Connect to database
+    db = SQLDatabase.from_uri("sqlite:///chinook.db")
+    
+    # Create toolkit
+    toolkit = SQLDatabaseToolkit(db=db)
+    
+    # Wrap tools
+    tools = [LangChainToolAdapter(tool) for tool in toolkit.get_tools()]
+    
+    # Create agent
+    agent = AssistantAgent(
+        "sql_assistant",
+        tools=tools,
+        model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+        system_message="You can query the database using SQL.",
+    )
+    
+    result = await agent.run(
+        "How many customers are in the database?"
+    )
+    print(result)
+
+asyncio.run(main())
+```
+
+## GraphRAG
+
+GraphRAG tools enable semantic search over document corpora using graph-based retrieval.
+
+### Setup
+
+Before using GraphRAG tools:
+
+1. Initialize GraphRAG project:
+   ```bash
+   python -m graphrag init --root ./ragtest
+   ```
+
+2. Configure `settings.yaml` with your LLM and embedding settings
+
+3. Add documents to the `input` directory
+
+4. Run indexing:
+   ```bash
+   python -m graphrag index --root ./ragtest
+   ```
+
+### Global Search Tool
+
+Global search finds broad patterns across the entire corpus:
+
+```python
+import asyncio
+from pathlib import Path
+from autogen_ext.tools.graphrag import GlobalSearchTool
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.agents import AssistantAgent
+
+async def main():
+    # Create global search tool
+    global_tool = GlobalSearchTool.from_settings(
+        root_dir=Path("./ragtest"),
+        config_filepath=Path("./ragtest/settings.yaml")
+    )
+    
+    # Create agent
+    agent = AssistantAgent(
+        name="search_assistant",
+        tools=[global_tool],
+        model_client=OpenAIChatCompletionClient(model="gpt-4o-mini"),
+        system_message=(
+            "You are a search assistant using GraphRAG. "
+            "For broad questions, use global_search."
+        ),
+    )
+    
+    # Query
+    result = await agent.run(
+        "What are the main themes in the documents?"
+    )
+    print(result)
+
+asyncio.run(main())
+```
+
+### Local Search Tool
+
+Local search finds specific information related to entities:
+
+```python
+from pathlib import Path
+from autogen_ext.tools.graphrag import LocalSearchTool
+
+local_tool = LocalSearchTool.from_settings(
+    root_dir=Path("./ragtest"),
+    config_filepath=Path("./ragtest/settings.yaml")
+)
+```
+
+### Using Both Search Types
+
+```python
+import asyncio
+from pathlib import Path
+from autogen_ext.tools.graphrag import GlobalSearchTool, LocalSearchTool
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.agents import AssistantAgent
+
+async def main():
+    root_dir = Path("./ragtest")
+    config = Path("./ragtest/settings.yaml")
+    
+    # Create both tools
+    global_tool = GlobalSearchTool.from_settings(root_dir, config)
+    local_tool = LocalSearchTool.from_settings(root_dir, config)
+    
+    # Create agent with both tools
+    agent = AssistantAgent(
+        name="search_assistant",
+        tools=[global_tool, local_tool],
+        model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+        system_message=(
+            "You have two search tools:\n"
+            "- global_search: For broad, abstract questions\n"
+            "- local_search: For specific information about entities"
+        ),
+    )
+    
+    # Agent will choose appropriate tool
+    result = await agent.run(
+        "Tell me about the key people mentioned in the documents"
+    )
+    print(result)
+
+asyncio.run(main())
+```
+
+### Configuration
+
+Customize GraphRAG behavior:
+
+```python
+from pathlib import Path
+from autogen_ext.tools.graphrag import (
+    GlobalSearchTool,
+    GlobalDataConfig,
+    GlobalContextConfig,
+    MapReduceConfig,
+)
+
+# Custom data configuration
+data_config = GlobalDataConfig(
+    entities_filepath=Path("./output/entities.parquet"),
+    communities_filepath=Path("./output/communities.parquet"),
+    reports_filepath=Path("./output/reports.parquet"),
+)
+
+# Custom context configuration
+context_config = GlobalContextConfig(
+    use_community_summary=True,
+    shuffle_data=True,
+    include_community_rank=True,
+)
+
+# Custom map-reduce configuration
+mapreduce_config = MapReduceConfig(
+    max_data_tokens=8000,
+    map_max_tokens=1000,
+    reduce_max_tokens=2000,
+)
+
+# Create tool with custom config
+tool = GlobalSearchTool(
+    data_config=data_config,
+    context_config=context_config,
+    mapreduce_config=mapreduce_config,
+)
+```
+
+## Best Practices
+
+### Security
+
+Always validate tool inputs:
+
+```python
+from pydantic import BaseModel, Field
+from autogen_core.tools import BaseTool
+
+class MyToolArgs(BaseModel):
+    url: str = Field(..., pattern=r"^https://.*")
+    max_length: int = Field(..., ge=1, le=10000)
+
+class MyTool(BaseTool[MyToolArgs, str]):
+    # Tool implementation
+    pass
+```
+
+### Error Handling
+
+Handle tool errors gracefully:
+
+```python
+from autogen_core import CancellationToken
+
+async def call_tool_safely(workbench, tool_name, args):
+    try:
+        result = await workbench.call_tool(tool_name, args)
+        return result
+    except TimeoutError:
+        return {"error": "Tool execution timed out"}
+    except Exception as e:
+        return {"error": f"Tool failed: {str(e)}"}
+```
+
+### Timeout Configuration
+
+Set appropriate timeouts:
+
+```python
+# HTTP tools
+tool = HttpTool(
+    name="slow_api",
+    timeout=30.0,  # 30 second timeout
+    # ... other config
+)
+
+# MCP servers
+params = StdioServerParams(
+    command="uvx",
+    args=["mcp-server"],
+    read_timeout_seconds=60,  # 1 minute timeout
+)
+```
+
+### Resource Cleanup
+
+Always clean up resources:
+
+```python
+# Use context managers
+async with McpWorkbench(server_params=params) as workbench:
+    result = await workbench.call_tool("tool_name", {})
+
+# Or explicit cleanup
+workbench = McpWorkbench(server_params=params)
+await workbench.start()
+try:
+    result = await workbench.call_tool("tool_name", {})
+finally:
+    await workbench.stop()
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Extensions" icon="puzzle-piece" href="/extensions/custom-extensions">
+    Build your own custom extensions
+  </Card>
+  <Card title="Model Clients" icon="brain" href="/extensions/model-clients">
+    Configure LLM providers
+  </Card>
+</CardGroup>

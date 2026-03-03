@@ -1,0 +1,234 @@
+---
+title: Welcome to AutoGen
+description: Build autonomous AI agents and multi-agent applications with ease
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="AutoGen Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="AutoGen Hero Dark"
+/>
+
+# Welcome to AutoGen
+
+AutoGen is a framework for creating multi-agent AI applications that can act autonomously or work alongside humans. Build sophisticated AI systems where multiple agents collaborate, share context, and solve complex tasks together.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get started in under 5 minutes with your first AI agent
+  </Card>
+  <Card
+    title="AgentChat"
+    icon="comments"
+    href="/agentchat/overview"
+  >
+    High-level API for rapid multi-agent prototyping
+  </Card>
+  <Card
+    title="Core API"
+    icon="cube"
+    href="/core/overview"
+  >
+    Event-driven runtime for scalable agent systems
+  </Card>
+  <Card
+    title="Extensions"
+    icon="puzzle-piece"
+    href="/extensions/overview"
+  >
+    LLM clients, tools, and integrations ecosystem
+  </Card>
+</CardGroup>
+
+## Why AutoGen?
+
+AutoGen provides everything you need to create AI agents and multi-agent workflows through a layered, extensible framework designed for both rapid prototyping and production deployment.
+
+### Three-Layer Architecture
+
+AutoGen uses a modular architecture with clearly divided responsibilities. You can start at the high level and drop down to lower layers when you need more control.
+
+<CardGroup cols={3}>
+  <Card title="Core API" icon="layer-group">
+    **Event-driven foundation**
+    
+    Message passing, agent runtime, and distributed execution based on the Actor model. Supports both Python and .NET with cross-language interoperability.
+    
+    - Standalone and distributed runtimes
+    - Topic-based messaging
+    - Agent lifecycle management
+    - Cross-platform support
+  </Card>
+  
+  <Card title="AgentChat API" icon="users">
+    **High-level abstractions**
+    
+    Intuitive defaults for rapid development. Built on Core API with preset agents and team patterns.
+    
+    - Pre-configured agent types
+    - Multi-agent teams (RoundRobin, Selector, Swarm)
+    - Built-in termination conditions
+    - Streaming support
+  </Card>
+  
+  <Card title="Extensions API" icon="plug">
+    **Extensible ecosystem**
+    
+    First and third-party extensions for models, tools, and capabilities.
+    
+    - OpenAI, Azure, Anthropic, Gemini clients
+    - Code execution sandboxes
+    - MCP server integration
+    - Custom tool support
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<AccordionGroup>
+  <Accordion title="Multi-Agent Collaboration" icon="users-gear">
+    Create teams of specialized agents that work together on complex tasks. Agents can:
+    - Share context and communicate via messages
+    - Take turns in round-robin fashion or use intelligent selection
+    - Hand off tasks between agents with the Swarm pattern
+    - Form hierarchical structures with orchestrator agents
+    
+    Built-in team patterns include RoundRobinGroupChat, SelectorGroupChat, Swarm, and GraphFlow for workflows.
+  </Accordion>
+
+  <Accordion title="Flexible Agent Types" icon="robot">
+    Start with high-level agents or build custom ones:
+    
+    - **AssistantAgent**: LLM-powered agent with tool use and reflection
+    - **CodeExecutorAgent**: Safely executes Python or Docker-based code
+    - **UserProxyAgent**: Human-in-the-loop interactions
+    - **Custom Agents**: Implement your own with full control
+    
+    All agents support streaming, tool calling, and state management.
+  </Accordion>
+
+  <Accordion title="Tool Integration" icon="wrench">
+    Agents can use tools to interact with external systems:
+    
+    - **Function Tools**: Wrap Python functions with automatic schema generation
+    - **MCP Servers**: Connect to Model Context Protocol servers (Playwright, filesystem, etc.)
+    - **Custom Tools**: Implement any tool interface
+    - **Agent Tools**: Use other agents as tools for hierarchical orchestration
+    
+    Tools support streaming results and error handling.
+  </Accordion>
+
+  <Accordion title="Model Flexibility" icon="brain">
+    Use any LLM provider through a unified interface:
+    
+    - OpenAI (GPT-4, GPT-4o, o1)
+    - Azure OpenAI with AAD authentication
+    - Anthropic Claude
+    - Google Gemini
+    - Local models via Ollama or llama.cpp
+    - Custom model clients
+    
+    All model clients support streaming and function calling where available.
+  </Accordion>
+
+  <Accordion title="Production Ready" icon="shield-check">
+    Built for reliability and scale:
+    
+    - **Distributed Runtime**: Scale across multiple machines
+    - **Memory Systems**: Persistent context with ChromaDB, Redis, or custom stores
+    - **Logging & Tracing**: OpenTelemetry integration for observability
+    - **Serialization**: Save and restore agent configurations
+    - **Termination Control**: Flexible stopping conditions for teams
+    
+    Supports both standalone and distributed deployment models.
+  </Accordion>
+
+  <Accordion title="Developer Experience" icon="code">
+    Designed for productivity:
+    
+    - **AutoGen Studio**: No-code GUI for prototyping multi-agent workflows
+    - **Type Safety**: Full type hints for IDE autocomplete
+    - **Async/Await**: Native async support throughout
+    - **Streaming UI**: Built-in console interface with progress tracking
+    - **Rich Ecosystem**: Active community and extensive examples
+  </Accordion>
+</AccordionGroup>
+
+## Real-World Applications
+
+AutoGen powers diverse AI applications:
+
+- **Magentic-One**: State-of-the-art multi-agent team for web browsing, code execution, and file handling
+- **Research Assistants**: Agents that search, analyze, and synthesize information
+- **Code Generation**: Multi-agent systems with coder, reviewer, and executor roles
+- **Customer Support**: Conversational agents with tool access and escalation
+- **Data Analysis**: Teams that query databases, run computations, and generate reports
+- **Creative Workflows**: Collaborative agents for writing, editing, and reviewing content
+
+## Architecture Philosophy
+
+AutoGen's layered design lets you choose the right level of abstraction:
+
+1. **Start High**: Use AgentChat for rapid prototyping with sensible defaults
+2. **Go Deep**: Drop to Core API when you need event-driven patterns or distributed execution
+3. **Extend Freely**: Add custom models, tools, and agents without framework modifications
+4. **Deploy Anywhere**: Run on a single machine or distribute across a cluster
+
+<Note>
+  **New to AutoGen?** We recommend starting with [Quickstart](/quickstart) to build your first agent, then exploring [Core Concepts](/concepts) to understand the architecture.
+</Note>
+
+## Community and Support
+
+Join a thriving ecosystem of AI developers:
+
+- **Discord**: Real-time chat at [aka.ms/autogen-discord](https://aka.ms/autogen-discord)
+- **GitHub Discussions**: Q&A and community support
+- **Weekly Office Hours**: Live sessions with maintainers
+- **Blog**: Tutorials and updates at [devblogs.microsoft.com/autogen](https://devblogs.microsoft.com/autogen/)
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card
+    title="Build Your First Agent"
+    icon="play"
+    href="/quickstart"
+  >
+    Follow the quickstart guide to create a working agent in minutes
+  </Card>
+  <Card
+    title="Understand Core Concepts"
+    icon="book"
+    href="/concepts"
+  >
+    Learn about agents, teams, tools, and the layered architecture
+  </Card>
+  <Card
+    title="Installation Guide"
+    icon="download"
+    href="/installation"
+  >
+    Detailed setup instructions for Python and .NET
+  </Card>
+  <Card
+    title="Explore Examples"
+    icon="code"
+    href="/examples/overview"
+  >
+    Browse sample applications and use cases
+  </Card>
+</CardGroup>
+
+<Info>
+  **Coming from AutoGen v0.2?** Check the [Migration Guide](/migration-guide) for instructions on updating your code.
+</Info>

@@ -1,0 +1,356 @@
+---
+title: Swarm Orchestration
+description: Implement swarm patterns for dynamic multi-agent collaboration
+---
+
+Swarm orchestration allows multiple agents to work together dynamically, with agents being selected based on the current context and task requirements.
+
+## What You'll Learn
+
+- How to implement swarm patterns with AutoGen
+- Dynamic agent selection strategies
+- Building collaborative agent teams
+- Implementing handoffs between agents
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]"
+    ```
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## What is Swarm Orchestration?
+
+Swarm orchestration is a pattern where:
+
+- Multiple specialized agents work on different aspects of a problem
+- An orchestrator dynamically selects which agent should act next
+- Agents can hand off tasks to other agents
+- The system adapts based on context and needs
+
+## Code Example
+
+```python
+import asyncio
+from typing import List
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Create specialized agents
+    planner = AssistantAgent(
+        "planner",
+        model_client=model_client,
+        description="Expert at breaking down complex problems into steps.",
+        system_message="""You are a strategic planner.
+        Break down complex problems into clear, actionable steps.
+        Don't implement - just plan.""",
+    )
+
+    researcher = AssistantAgent(
+        "researcher",
+        model_client=model_client,
+        description="Expert at gathering and analyzing information.",
+        system_message="""You are a researcher.
+        Gather relevant information and provide detailed analysis.
+        Focus on facts and data.""",
+    )
+
+    implementer = AssistantAgent(
+        "implementer",
+        model_client=model_client,
+        description="Expert at implementing solutions and writing code.",
+        system_message="""You are an implementer.
+        Write clean, efficient code to solve problems.
+        Follow best practices.""",
+    )
+
+    reviewer = AssistantAgent(
+        "reviewer",
+        model_client=model_client,
+        description="Expert at reviewing work and ensuring quality.",
+        system_message="""You are a quality reviewer.
+        Review solutions for correctness, efficiency, and best practices.
+        Provide constructive feedback.""",
+    )
+
+    # Create swarm with selector
+    team = SelectorGroupChat(
+        participants=[planner, researcher, implementer, reviewer],
+        model_client=model_client,
+        selector_prompt="""Select the most appropriate agent based on the current task:
+        - planner: For breaking down problems
+        - researcher: For gathering information
+        - implementer: For writing code
+        - reviewer: For quality checks
+        
+        Consider the conversation history and select the agent that best fits the next step.""",
+    )
+
+    # Run collaborative task
+    await Console(
+        team.run_stream(
+            task="""Create a Python function to analyze sentiment in customer reviews.
+            The function should handle edge cases and be production-ready."""
+        )
+    )
+
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python swarm_pattern.py
+```
+
+## Expected Output
+
+```
+---------- planner ----------
+I'll break this down into steps:
+1. Define the function interface
+2. Research sentiment analysis approaches
+3. Implement the core logic
+4. Add error handling
+5. Review for production readiness
+
+---------- researcher ----------
+For sentiment analysis, we should consider:
+- Using TextBlob or VADER for simple cases
+- Handling empty strings, special characters
+- Supporting multiple languages if needed
+
+---------- implementer ----------
+```python
+from textblob import TextBlob
+from typing import Optional
+
+def analyze_sentiment(review: str) -> dict:
+    """Analyze sentiment of customer review."""
+    if not review or not review.strip():
+        return {"polarity": 0.0, "sentiment": "neutral", "confidence": 0.0}
+    
+    analysis = TextBlob(review)
+    polarity = analysis.sentiment.polarity
+    
+    if polarity > 0.1:
+        sentiment = "positive"
+    elif polarity < -0.1:
+        sentiment = "negative"
+    else:
+        sentiment = "neutral"
+    
+    return {
+        "polarity": polarity,
+        "sentiment": sentiment,
+        "confidence": abs(polarity)
+    }
+```
+
+---------- reviewer ----------
+Good implementation! Suggestions:
+- Add type hints for the return dict
+- Consider adding logging
+- Add unit tests
+Overall: Production-ready with minor improvements.
+```
+
+## How It Works
+
+1. **Agent Descriptions**: Each agent has a clear role and expertise
+2. **Selector**: Uses an LLM to choose the most appropriate agent
+3. **Context-Aware**: Selection considers conversation history
+4. **Dynamic Flow**: No fixed order - agents are called as needed
+
+## Advanced Swarm with Handoffs
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.conditions import TextMentionTermination
+from autogen_agentchat.teams import Swarm
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Customer service swarm
+    triage_agent = AssistantAgent(
+        "triage",
+        model_client=model_client,
+        description="Routes customer inquiries to the right specialist.",
+        system_message="""You triage customer inquiries.
+        Determine if they need: billing, technical, or general support.
+        Hand off to the appropriate specialist.""",
+        handoffs=["billing_specialist", "tech_specialist", "general_support"],
+    )
+
+    billing_agent = AssistantAgent(
+        "billing_specialist",
+        model_client=model_client,
+        description="Handles billing and payment issues.",
+        system_message="You handle billing inquiries. Be clear and professional.",
+    )
+
+    tech_agent = AssistantAgent(
+        "tech_specialist",
+        model_client=model_client,
+        description="Handles technical support issues.",
+        system_message="You provide technical support. Give step-by-step guidance.",
+    )
+
+    general_agent = AssistantAgent(
+        "general_support",
+        model_client=model_client,
+        description="Handles general questions and information.",
+        system_message="You handle general inquiries. Be helpful and informative.",
+    )
+
+    # Create swarm with handoff capability
+    team = Swarm(
+        participants=[triage_agent, billing_agent, tech_agent, general_agent],
+        termination_condition=TextMentionTermination("TERMINATE"),
+    )
+
+    # Process customer inquiry
+    await Console(
+        team.run_stream(
+            task="My account was charged twice this month. How do I get a refund?"
+        )
+    )
+
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Key Concepts
+
+<CardGroup cols={2}>
+  <Card title="Dynamic Selection" icon="shuffle">
+    Agents are chosen based on current context, not a fixed sequence.
+  </Card>
+  
+  <Card title="Handoffs" icon="hand">
+    Agents can transfer tasks to specialists with the right expertise.
+  </Card>
+  
+  <Card title="Specialization" icon="star">
+    Each agent has specific skills and responsibilities.
+  </Card>
+  
+  <Card title="Collaboration" icon="users">
+    Multiple agents work together toward a common goal.
+  </Card>
+</CardGroup>
+
+## Swarm vs. Other Patterns
+
+| Pattern | Use When | Selection |
+|---------|----------|----------|
+| **Swarm** | Dynamic, context-dependent tasks | LLM-based selector |
+| **Round Robin** | Sequential steps, all agents needed | Fixed order |
+| **Selector** | Need smart routing | LLM chooses next agent |
+| **Handoffs** | Specialized expertise | Agent-initiated transfer |
+
+## Best Practices
+
+1. **Clear Roles**: Give each agent a specific, well-defined purpose
+2. **Good Descriptions**: Help the selector understand when to use each agent
+3. **Limit Participants**: Too many agents can confuse the selector
+4. **Set Termination**: Define clear conditions for when the task is complete
+5. **Monitor Loops**: Prevent agents from getting stuck in cycles
+
+## Real-World Use Cases
+
+<AccordionGroup>
+  <Accordion title="Customer Support">
+    - Triage agent routes to specialists
+    - Billing, technical, and general support agents
+    - Escalation to human agents when needed
+  </Accordion>
+  
+  <Accordion title="Software Development">
+    - Requirements analyst
+    - Architect for design
+    - Multiple developers for implementation
+    - QA agent for testing
+    - DevOps for deployment
+  </Accordion>
+  
+  <Accordion title="Content Creation">
+    - Research agent gathers information
+    - Writer creates content
+    - Editor refines and polishes
+    - SEO specialist optimizes
+    - Publisher handles distribution
+  </Accordion>
+  
+  <Accordion title="Data Analysis">
+    - Data collector agent
+    - Cleaner for preprocessing
+    - Analyst for insights
+    - Visualizer for charts
+    - Reporter for summaries
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Poor Agent Selection
+
+Improve agent descriptions:
+
+```python
+agent = AssistantAgent(
+    "specialist",
+    description="Expert at X. Call when: [specific scenarios]. Don't call for: [other scenarios].",
+    ...
+)
+```
+
+### Infinite Loops
+
+Add termination conditions:
+
+```python
+from autogen_agentchat.conditions import MaxMessageTermination
+
+team = SelectorGroupChat(
+    participants=[...],
+    termination_condition=MaxMessageTermination(max_messages=20),
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Graph Orchestration" icon="project-diagram" href="/examples/graph-orchestration">
+    Learn structured workflows with GraphFlow
+  </Card>
+  
+  <Card title="Customer Support" icon="headset" href="/examples/customer-support">
+    Build a complete customer support system
+  </Card>
+</CardGroup>

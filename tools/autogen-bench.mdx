@@ -1,0 +1,411 @@
+---
+title: AutoGenBench
+description: Benchmarking suite for evaluating AutoGen agents
+icon: "chart-line"
+---
+
+AutoGenBench (agbench) is a tool for repeatedly running a set of pre-defined AutoGen tasks in a setting with tightly-controlled initial conditions. With each run, AutoGenBench starts from a blank slate, requiring agents to work out what code needs to be written and what libraries or dependencies to install to solve tasks.
+
+<Info>
+  AutoGenBench works with all AutoGen 0.1.* and 0.2.* versions.
+</Info>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Reproducible Testing" icon="rotate">
+    Run agents in fresh Docker containers for consistent, isolated testing
+  </Card>
+  
+  <Card title="Comprehensive Logging" icon="file-lines">
+    Detailed logs of agent behavior, code execution, and task results
+  </Card>
+  
+  <Card title="Built-in Benchmarks" icon="clipboard-list">
+    Pre-configured benchmarks like HumanEval, GAIA, and AssistantBench
+  </Card>
+  
+  <Card title="Metrics Analysis" icon="chart-bar">
+    Built-in tools to tabulate and analyze benchmark results
+  </Card>
+</CardGroup>
+
+## Requirements
+
+<Warning>
+  AutoGenBench requires Docker (Desktop or Engine) and **will not run in GitHub Codespaces** unless you opt for native execution (strongly discouraged).
+</Warning>
+
+### Docker Installation
+
+Install Docker Desktop from [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
+
+#### WSL Setup (Windows)
+
+If you're working in WSL:
+
+<Steps>
+  <Step title="Install Docker Desktop">
+    Download and install Docker Desktop. Restart is required after installation.
+  </Step>
+  
+  <Step title="Enable WSL Integration">
+    Open Docker Desktop → Settings → Resources → WSL Integration
+    
+    Enable integration with your Ubuntu distribution.
+  </Step>
+  
+  <Step title="Clone and configure AutoGen">
+    ```bash
+    git clone git@github.com:microsoft/autogen.git
+    export AUTOGEN_REPO_BASE=<path_to_autogen>
+    ```
+    
+    <Note>
+      The `AUTOGEN_REPO_BASE` environment variable enables Docker containers to use the correct version of agents.
+    </Note>
+  </Step>
+</Steps>
+
+## Installation
+
+Install AutoGenBench from the source repository:
+
+```bash
+pip install -e autogen/python/packages/agbench
+```
+
+### API Key Configuration
+
+AutoGenBench requires API keys for LLM access. Configure them using one of these methods:
+
+<Tabs>
+  <Tab title="Environment Variable">
+    ```bash
+    export OAI_CONFIG_LIST=$(cat ./OAI_CONFIG_LIST)
+    ```
+    
+    This is the most convenient option for running multiple benchmarks.
+  </Tab>
+  
+  <Tab title="Config File">
+    Create an `OAI_CONFIG_LIST` file in your working directory:
+    
+    ```json OAI_CONFIG_LIST
+    [
+      {
+        "model": "gpt-4",
+        "api_key": "your-api-key-here"
+      }
+    ]
+    ```
+  </Tab>
+  
+  <Tab title="OpenAI API Key">
+    If no `OAI_CONFIG_LIST` is provided, AutoGenBench will use the `OPENAI_API_KEY` environment variable:
+    
+    ```bash
+    export OPENAI_API_KEY=your-api-key-here
+    ```
+  </Tab>
+</Tabs>
+
+### Additional API Keys
+
+Some benchmark scenarios require additional keys (e.g., Bing Search API). Add them to an `ENV.json` file in your working folder:
+
+```json ENV.json
+{
+    "BING_API_KEY": "xxxyyyzzz"
+}
+```
+
+## Quick Start
+
+Here's a typical workflow for running the HumanEval benchmark:
+
+<Steps>
+  <Step title="Navigate to benchmark directory">
+    ```bash
+    cd autogen/python/packages/agbench/benchmarks/HumanEval
+    ```
+  </Step>
+  
+  <Step title="Create ENV.json configuration">
+    For Azure OpenAI:
+    ```json ENV.json
+    {
+        "CHAT_COMPLETION_KWARGS_JSON": "{}",
+        "CHAT_COMPLETION_PROVIDER": "azure"
+    }
+    ```
+    
+    For OpenAI:
+    ```json ENV.json
+    {
+      "CHAT_COMPLETION_PROVIDER": "openai",
+      "CHAT_COMPLETION_KWARGS_JSON": "{\"api_key\": \"YOUR_API_KEY\", \"model\": \"gpt-4\"}"
+    }
+    ```
+  </Step>
+  
+  <Step title="Initialize tasks">
+    ```bash
+    python Scripts/init_tasks.py
+    ```
+    
+    This will download HumanEval and create task files in the `Tasks/` directory.
+  </Step>
+  
+  <Step title="Run the benchmark">
+    ```bash
+    agbench run Tasks/human_eval_MagenticOne.jsonl
+    ```
+    
+    You'll see raw logs showing the agents in action.
+  </Step>
+  
+  <Step title="Tabulate results">
+    In a new terminal, view the summary:
+    ```bash
+    agbench tabulate Results/human_eval_MagenticOne
+    ```
+  </Step>
+</Steps>
+
+## Command Reference
+
+### agbench run
+
+Run benchmark scenarios with controlled initial conditions.
+
+```bash
+agbench run [OPTIONS] scenario
+```
+
+<ParamField path="scenario" type="string" required>
+  The JSONL scenario file to run. If a directory is specified, all JSONL scenarios in the directory are run.
+</ParamField>
+
+<ParamField path="--config, -c" type="string" default="OAI_CONFIG_LIST">
+  Environment variable name or path to the OAI_CONFIG_LIST
+</ParamField>
+
+<ParamField path="--repeat, -r" type="number" default="1">
+  Number of repetitions to run for each scenario
+</ParamField>
+
+<ParamField path="--subsample, -s" type="string" default="1.0">
+  Run on a subsample of tasks:
+  - Decimal (e.g., `0.7`): Run on 70% of tasks
+  - Integer (e.g., `7`): Run exactly 7 tasks from each file
+</ParamField>
+
+<ParamField path="--model, -m" type="string">
+  Filter config_list to include only models matching the provided name
+</ParamField>
+
+<ParamField path="--docker-image, -d" type="string" default="agbench:default">
+  Docker image to use when running scenarios. Cannot be used with `--native`.
+</ParamField>
+
+<ParamField path="--native" type="boolean">
+  Run scenarios natively rather than in Docker
+  
+  <Warning>
+    This is not advisable and should be done with great caution.
+  </Warning>
+</ParamField>
+
+<ParamField path="--requirements" type="string">
+  Requirements file to pip install before running the scenario
+</ParamField>
+
+#### Examples
+
+```bash
+# Run all tasks in a file
+agbench run Tasks/human_eval_MagenticOne.jsonl
+
+# Run each task 10 times
+agbench run --repeat 10 Tasks/human_eval_MagenticOne.jsonl
+
+# Run on 70% of tasks
+agbench run --subsample 0.7 Tasks/human_eval_MagenticOne.jsonl
+
+# Run only 5 random tasks
+agbench run --subsample 5 Tasks/human_eval_MagenticOne.jsonl
+
+# Use specific model
+agbench run --model gpt-4 Tasks/human_eval_MagenticOne.jsonl
+
+# Use custom Docker image
+agbench run --docker-image my-custom-image:latest Tasks/human_eval_MagenticOne.jsonl
+```
+
+### agbench tabulate
+
+Tabulate and analyze benchmark results.
+
+```bash
+agbench tabulate results_directory
+```
+
+#### Example
+
+```bash
+# View summary of results
+agbench tabulate Results/human_eval_MagenticOne
+```
+
+### agbench remove_missing
+
+Remove missing or incomplete results from the results directory.
+
+```bash
+agbench remove_missing results_directory
+```
+
+## Results Structure
+
+AutoGenBench stores results in a hierarchical folder structure:
+
+```
+./results/[scenario]/[task_id]/[instance_id]
+```
+
+### Example Structure
+
+```
+./results/default_two_agents/two_agent_stocks/0
+./results/default_two_agents/two_agent_stocks/1
+...
+./results/default_two_agents/two_agent_stocks/9
+```
+
+- **scenario**: The benchmark scenario being run
+- **task_id**: Maps to a specific prompt or set of parameters
+- **instance_id**: A specific attempt or run (0-9 for 10 repetitions)
+
+### Result Files
+
+Each result directory contains:
+
+<AccordionGroup>
+  <Accordion title="timestamp.txt">
+    Records the date and time of the run, along with the version of the autogen-agentchat library installed.
+  </Accordion>
+  
+  <Accordion title="console_log.txt">
+    All console output produced by Docker when running AutoGen. Read this like you would a regular console.
+  </Accordion>
+  
+  <Accordion title="[agent]_messages.json">
+    For each agent, a log of their message dictionaries showing the conversation flow.
+  </Accordion>
+  
+  <Accordion title="./coding directory">
+    Contains all code written by AutoGen and all artifacts produced by that code.
+  </Accordion>
+</AccordionGroup>
+
+## Built-in Benchmarks
+
+<CardGroup cols={2}>
+  <Card title="HumanEval" icon="code">
+    Code generation benchmark with programming problems
+  </Card>
+  
+  <Card title="GAIA" icon="brain">
+    General AI assistants benchmark for complex reasoning tasks
+  </Card>
+  
+  <Card title="AssistantBench" icon="user-robot">
+    Assistant capabilities evaluation across various domains
+  </Card>
+</CardGroup>
+
+<Note>
+  Each benchmark has its own README in the `benchmarks/` directory with specific instructions and requirements.
+</Note>
+
+## Creating Custom Benchmarks
+
+To define your own tasks or benchmarks, review the [contributor's guide](https://github.com/microsoft/autogen/blob/main/python/packages/agbench/CONTRIBUTING.md) for complete technical details on:
+
+- Task definition format (JSONL)
+- Scenario templates
+- Custom evaluation metrics
+- Benchmark contribution guidelines
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Docker" icon="docker">
+    Always run benchmarks in Docker for consistency and safety
+  </Card>
+  
+  <Card title="Multiple Runs" icon="arrows-rotate">
+    Use `--repeat` to run multiple iterations for statistical significance
+  </Card>
+  
+  <Card title="Subsample First" icon="filter">
+    Test with `--subsample` on a small set before running full benchmarks
+  </Card>
+  
+  <Card title="Monitor Logs" icon="eye">
+    Review console logs to understand agent behavior and failures
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Docker Not Running
+
+```bash
+Error: Cannot connect to Docker daemon
+```
+
+**Solution**: Ensure Docker Desktop is running and accessible.
+
+### Missing AUTOGEN_REPO_BASE
+
+```bash
+Error: AUTOGEN_REPO_BASE environment variable not set
+```
+
+**Solution**: Export the path to your AutoGen repository:
+```bash
+export AUTOGEN_REPO_BASE=/path/to/autogen
+```
+
+### API Key Issues
+
+```bash
+Error: No API key found
+```
+
+**Solution**: Set `OAI_CONFIG_LIST` environment variable or file, or use `OPENAI_API_KEY`.
+
+## Get Help
+
+For detailed help on any command:
+
+```bash
+agbench --help
+agbench run --help
+agbench tabulate --help
+agbench remove_missing --help
+```
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/microsoft/autogen/tree/main/python/packages/agbench">
+    View source code and contribute
+  </Card>
+  
+  <Card title="Contributing Guide" icon="code-pull-request" href="https://github.com/microsoft/autogen/blob/main/python/packages/agbench/CONTRIBUTING.md">
+    Learn how to create custom benchmarks
+  </Card>
+</CardGroup>

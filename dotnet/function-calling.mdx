@@ -1,0 +1,659 @@
+---
+title: 'Function Calling'
+description: 'Add type-safe function calling to agents with source generators'
+---
+
+## Overview
+
+AutoGen for .NET provides two approaches to function calling:
+
+1. **Source Generator** - Compile-time code generation with the `[Function]` attribute
+2. **Microsoft.Extensions.AI** - Runtime function creation with `AIFunctionFactory`
+
+Both approaches enable agents to call C# functions based on natural language requests.
+
+## Source Generator Approach
+
+The recommended approach using AutoGen's source generator for type safety and performance.
+
+### Installation
+
+```bash
+dotnet add package AutoGen.SourceGenerator
+```
+
+### Basic Example
+
+<Steps>
+  <Step title="Define functions with [Function] attribute">
+    ```csharp
+    using AutoGen.Core;
+
+    public partial class WeatherTools
+    {
+        /// <summary>
+        /// Get weather report for a city
+        /// </summary>
+        /// <param name="city">city name</param>
+        /// <param name="date">date in YYYY-MM-DD format</param>
+        [Function]
+        public async Task<string> GetWeather(string city, string date)
+        {
+            return $"Weather in {city} on {date} is sunny";
+        }
+
+        /// <summary>
+        /// Convert temperature between units
+        /// </summary>
+        /// <param name="value">temperature value</param>
+        /// <param name="fromUnit">source unit (C, F, K)</param>
+        /// <param name="toUnit">target unit (C, F, K)</param>
+        [Function]
+        public async Task<string> ConvertTemperature(
+            double value,
+            string fromUnit,
+            string toUnit)
+        {
+            // Conversion logic here
+            return $"{value}°{fromUnit} = {value}°{toUnit}";
+        }
+    }
+    ```
+
+    <Note>
+    The class must be `partial` for the source generator to add generated code.
+    </Note>
+  </Step>
+
+  <Step title="Register functions with agent">
+    ```csharp
+    using AutoGen.Core;
+    using AutoGen.OpenAI;
+    using AutoGen.OpenAI.Extension;
+
+    var tools = new WeatherTools();
+    var gpt4 = GetOpenAIClient(); // Your OpenAI client setup
+
+    var functionCallMiddleware = new FunctionCallMiddleware(
+        functions: [
+            tools.GetWeatherFunctionContract,
+            tools.ConvertTemperatureFunctionContract,
+        ],
+        functionMap: new Dictionary<string, Func<string, Task<string>>>
+        {
+            { nameof(tools.GetWeather), tools.GetWeatherWrapper },
+            { nameof(tools.ConvertTemperature), tools.ConvertTemperatureWrapper },
+        });
+
+    var agent = new OpenAIChatAgent(
+        chatClient: gpt4,
+        name: "assistant",
+        systemMessage: "You are a helpful weather assistant")
+        .RegisterMessageConnector()
+        .RegisterStreamingMiddleware(functionCallMiddleware)
+        .RegisterPrintMessage();
+    ```
+  </Step>
+
+  <Step title="Use the agent">
+    ```csharp
+    var response = await agent.SendAsync(
+        "What's the weather in Seattle on 2024-03-15?");
+    
+    Console.WriteLine(response.GetContent());
+    // Output: Weather in Seattle on 2024-03-15 is sunny
+    ```
+  </Step>
+</Steps>
+
+### How Source Generation Works
+
+When you mark a method with `[Function]`, the source generator creates:
+
+1. **Function Contract** - Schema definition from method signature and XML docs
+2. **Function Wrapper** - Type-safe deserialization and invocation
+
+<CodeGroup>
+```csharp Your Code
+public partial class WeatherTools
+{
+    /// <summary>
+    /// Get weather report
+    /// </summary>
+    /// <param name="city">city name</param>
+    [Function]
+    public async Task<string> GetWeather(string city)
+    {
+        return $"Weather in {city} is sunny";
+    }
+}
+```
+
+```csharp Generated Code
+public partial class WeatherTools
+{
+    // Generated: Function Contract
+    public FunctionContract GetWeatherFunctionContract => new()
+    {
+        ClassName = "WeatherTools",
+        Name = "GetWeather",
+        Description = "Get weather report",
+        ReturnType = typeof(Task<string>),
+        Parameters = new[]
+        {
+            new FunctionParameterContract
+            {
+                Name = "city",
+                Description = "city name",
+                ParameterType = typeof(string),
+                IsRequired = true,
+            },
+        },
+    };
+
+    // Generated: JSON Schema for parameters
+    private class GetWeatherSchema
+    {
+        public string city { get; set; }
+    }
+
+    // Generated: Type-safe wrapper
+    public Task<string> GetWeatherWrapper(string arguments)
+    {
+        var schema = JsonSerializer.Deserialize<GetWeatherSchema>(
+            arguments,
+            new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            });
+
+        return GetWeather(schema.city);
+    }
+}
+```
+</CodeGroup>
+
+### Complex Example
+
+Comprehensive example with multiple function types:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using Microsoft.Extensions.AI;
+
+public partial class MathTools
+{
+    /// <summary>
+    /// Convert string to uppercase
+    /// </summary>
+    /// <param name="message">text to convert</param>
+    [Function]
+    public async Task<string> UpperCase(string message)
+    {
+        return message.ToUpper();
+    }
+
+    /// <summary>
+    /// Concatenate strings
+    /// </summary>
+    /// <param name="strings">strings to concatenate</param>
+    [Function]
+    public async Task<string> ConcatString(string[] strings)
+    {
+        return string.Join(" ", strings);
+    }
+
+    /// <summary>
+    /// Calculate tax
+    /// </summary>
+    /// <param name="price">price, should be an integer</param>
+    /// <param name="taxRate">tax rate, should be in range (0, 1)</param>
+    [Function]
+    public async Task<string> CalculateTax(int price, float taxRate)
+    {
+        return $"tax is {price * taxRate}";
+    }
+}
+
+public class FunctionCallingExample
+{
+    public static async Task RunAsync()
+    {
+        var instance = new MathTools();
+        var gpt4o = GetGPT4oClient();
+
+        var toolCallMiddleware = new FunctionCallMiddleware(
+            functions: [
+                instance.UpperCaseFunctionContract,
+                instance.ConcatStringFunctionContract,
+                instance.CalculateTaxFunctionContract,
+            ],
+            functionMap: new Dictionary<string, Func<string, Task<string>>>
+            {
+                { nameof(instance.UpperCase), instance.UpperCaseWrapper },
+                { nameof(instance.ConcatString), instance.ConcatStringWrapper },
+                { nameof(instance.CalculateTax), instance.CalculateTaxWrapper },
+            });
+
+        var agent = new OpenAIChatAgent(
+            chatClient: gpt4o,
+            name: "agent",
+            systemMessage: "You are a helpful AI assistant")
+            .RegisterMessageConnector()
+            .RegisterStreamingMiddleware(toolCallMiddleware)
+            .RegisterPrintMessage();
+
+        // Single function call
+        var upperCase = await agent.SendAsync("convert to upper case: hello world");
+        Console.WriteLine(upperCase.GetContent()); // "HELLO WORLD"
+
+        // Parallel function calls
+        var taxes = await agent.SendAsync(
+            "calculate tax: 100 at 0.1; calculate tax: 200 at 0.2");
+        Console.WriteLine(taxes.GetContent()); // "tax is 10\ntax is 40"
+    }
+}
+```
+
+## Microsoft.Extensions.AI Approach
+
+Use `AIFunctionFactory` for runtime function creation:
+
+```csharp
+using Microsoft.Extensions.AI;
+using AutoGen.Core;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+
+public partial class ToolsWithMEAI
+{
+    /// <summary>
+    /// Get current time
+    /// </summary>
+    [Function]
+    public async Task<string> GetCurrentTime()
+    {
+        return DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    /// <summary>
+    /// Calculate factorial
+    /// </summary>
+    /// <param name="n">number to calculate factorial for</param>
+    [Function]
+    public async Task<string> Factorial(int n)
+    {
+        long result = 1;
+        for (int i = 2; i <= n; i++)
+            result *= i;
+        return result.ToString();
+    }
+}
+
+public static async Task UseWithMEAI()
+{
+    var tools = new ToolsWithMEAI();
+    var gpt4o = GetGPT4oClient();
+
+    // Create AIFunction instances
+    AIFunction[] aiFunctions = [
+        AIFunctionFactory.Create(tools.GetCurrentTime),
+        AIFunctionFactory.Create(tools.Factorial),
+    ];
+
+    var middleware = new FunctionCallMiddleware(aiFunctions);
+
+    var agent = new OpenAIChatAgent(
+        chatClient: gpt4o,
+        name: "agent",
+        systemMessage: "You are a helpful assistant")
+        .RegisterMessageConnector()
+        .RegisterStreamingMiddleware(middleware)
+        .RegisterPrintMessage();
+
+    var response = await agent.SendAsync("What's 5 factorial?");
+    Console.WriteLine(response.GetContent()); // "120"
+}
+```
+
+## Function Requirements
+
+<Warning>
+Functions decorated with `[Function]` must follow these rules:
+</Warning>
+
+### Return Type
+
+Must return `Task<string>`:
+
+<CodeGroup>
+```csharp ✅ Correct
+[Function]
+public async Task<string> GetData()
+{
+    return "data";
+}
+```
+
+```csharp ❌ Wrong
+[Function]
+public string GetData() // Missing async Task<string>
+{
+    return "data";
+}
+
+[Function]
+public async Task<int> GetNumber() // Wrong return type
+{
+    return 42;
+}
+```
+</CodeGroup>
+
+### Parameter Types
+
+Use primitive types and their arrays for best results:
+
+<CodeGroup>
+```csharp ✅ Supported Types
+[Function]
+public async Task<string> Process(
+    string text,              // ✅ string
+    int count,                // ✅ int
+    double value,             // ✅ double
+    float ratio,              // ✅ float
+    bool enabled,             // ✅ bool
+    string[] items,           // ✅ string array
+    int[] numbers)            // ✅ int array
+{
+    return "success";
+}
+```
+
+```csharp ⚠️ Complex Types
+[Function]
+public async Task<string> ProcessComplex(
+    MyCustomClass data,       // ⚠️ May not serialize well
+    Dictionary<string, int> map) // ⚠️ Limited support
+{
+    return "success";
+}
+```
+</CodeGroup>
+
+### XML Documentation
+
+Provide descriptions via XML comments:
+
+```csharp
+/// <summary>
+/// This becomes the function description
+/// </summary>
+/// <param name="city">This describes the city parameter</param>
+/// <param name="date">This describes the date parameter</param>
+[Function]
+public async Task<string> GetWeather(string city, string date)
+{
+    return $"Weather in {city} on {date}";
+}
+```
+
+The LLM uses these descriptions to understand when and how to call functions.
+
+## Handling Function Results
+
+### Tool Call Messages
+
+Function calls return `ToolCallAggregateMessage`:
+
+```csharp
+var response = await agent.SendAsync("What's the weather in Paris?");
+
+if (response is ToolCallAggregateMessage toolCallMsg)
+{
+    var toolCalls = toolCallMsg.GetToolCalls();
+    
+    foreach (var call in toolCalls)
+    {
+        Console.WriteLine($"Function: {call.FunctionName}");
+        Console.WriteLine($"Arguments: {call.FunctionArguments}");
+        Console.WriteLine($"Result: {call.Result}");
+    }
+    
+    // Get final content after function execution
+    Console.WriteLine(response.GetContent());
+}
+```
+
+### Sending Results Back to LLM
+
+Send function results back for natural language response:
+
+```csharp
+var toolCallResponse = await agent.SendAsync("Calculate tax for $100 at 10%");
+
+// Send the tool call result back to get a natural language response
+var finalResponse = await agent.SendAsync(toolCallResponse);
+
+Console.WriteLine(finalResponse.GetContent());
+// "The tax on $100 at a rate of 10% is $10."
+```
+
+## Advanced Patterns
+
+### Multiple Tool Classes
+
+Organize functions into logical groups:
+
+```csharp
+public partial class WeatherTools
+{
+    [Function]
+    public async Task<string> GetWeather(string city)
+        => $"Weather in {city}";
+
+    [Function]
+    public async Task<string> GetForecast(string city, int days)
+        => $"{days}-day forecast for {city}";
+}
+
+public partial class MathTools
+{
+    [Function]
+    public async Task<string> Add(int a, int b)
+        => (a + b).ToString();
+
+    [Function]
+    public async Task<string> Multiply(int a, int b)
+        => (a * b).ToString();
+}
+
+// Register both
+var weather = new WeatherTools();
+var math = new MathTools();
+
+var middleware = new FunctionCallMiddleware(
+    functions: [
+        weather.GetWeatherFunctionContract,
+        weather.GetForecastFunctionContract,
+        math.AddFunctionContract,
+        math.MultiplyFunctionContract,
+    ],
+    functionMap: new Dictionary<string, Func<string, Task<string>>>
+    {
+        { nameof(weather.GetWeather), weather.GetWeatherWrapper },
+        { nameof(weather.GetForecast), weather.GetForecastWrapper },
+        { nameof(math.Add), math.AddWrapper },
+        { nameof(math.Multiply), math.MultiplyWrapper },
+    });
+```
+
+### Stateful Functions
+
+Maintain state across function calls:
+
+```csharp
+public partial class StatefulTools
+{
+    private readonly Dictionary<string, string> _memory = new();
+
+    /// <summary>
+    /// Store a value with a key
+    /// </summary>
+    /// <param name="key">storage key</param>
+    /// <param name="value">value to store</param>
+    [Function]
+    public async Task<string> Store(string key, string value)
+    {
+        _memory[key] = value;
+        return $"Stored {value} at {key}";
+    }
+
+    /// <summary>
+    /// Retrieve a stored value
+    /// </summary>
+    /// <param name="key">storage key</param>
+    [Function]
+    public async Task<string> Retrieve(string key)
+    {
+        return _memory.TryGetValue(key, out var value)
+            ? value
+            : $"No value found for {key}";
+    }
+}
+```
+
+### Async Operations
+
+Handle async operations properly:
+
+```csharp
+public partial class AsyncTools
+{
+    private readonly HttpClient _httpClient = new();
+
+    /// <summary>
+    /// Fetch data from URL
+    /// </summary>
+    /// <param name="url">URL to fetch</param>
+    [Function]
+    public async Task<string> FetchUrl(string url)
+    {
+        try
+        {
+            var response = await _httpClient.GetStringAsync(url);
+            return $"Fetched {response.Length} characters from {url}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error fetching {url}: {ex.Message}";
+        }
+    }
+}
+```
+
+### Error Handling
+
+Handle errors gracefully in functions:
+
+```csharp
+public partial class SafeTools
+{
+    /// <summary>
+    /// Divide two numbers
+    /// </summary>
+    /// <param name="a">dividend</param>
+    /// <param name="b">divisor</param>
+    [Function]
+    public async Task<string> Divide(double a, double b)
+    {
+        if (b == 0)
+            return "Error: Division by zero";
+        
+        var result = a / b;
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Parse and process JSON data
+    /// </summary>
+    /// <param name="json">JSON string</param>
+    [Function]
+    public async Task<string> ProcessJson(string json)
+    {
+        try
+        {
+            var data = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+            return $"Processed {data.Count} fields";
+        }
+        catch (JsonException ex)
+        {
+            return $"Invalid JSON: {ex.Message}";
+        }
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Function Design">
+    - Keep functions focused on a single task
+    - Use descriptive names that indicate the action
+    - Provide clear XML documentation
+    - Return human-readable strings
+    - Handle errors gracefully
+  </Accordion>
+  
+  <Accordion title="Parameter Guidelines">
+    - Use primitive types when possible
+    - Limit the number of parameters (5 or fewer)
+    - Make parameters required unless truly optional
+    - Validate inputs and return error messages
+    - Use meaningful parameter names
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Cache expensive computations
+    - Use async/await properly
+    - Avoid long-running operations
+    - Implement timeouts for external calls
+    - Consider rate limiting
+  </Accordion>
+  
+  <Accordion title="Testing">
+    ```csharp
+    [Fact]
+    public async Task TestWeatherFunction()
+    {
+        var tools = new WeatherTools();
+        var result = await tools.GetWeather("Seattle", "2024-03-15");
+        
+        Assert.Contains("Seattle", result);
+        Assert.Contains("2024-03-15", result);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Code Execution" icon="terminal" href="/dotnet/code-execution">
+    Execute code snippets dynamically
+  </Card>
+  
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Use functions in multi-agent conversations
+  </Card>
+  
+  <Card title="OpenAI Integration" icon="openai" href="/dotnet/openai">
+    Learn about OpenAI-specific features
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples">
+    See complete function calling examples
+  </Card>
+</CardGroup>

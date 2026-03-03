@@ -1,0 +1,524 @@
+---
+title: 'Group Chat'
+description: 'Orchestrate multi-agent conversations with GroupChat in .NET'
+---
+
+## What is Group Chat?
+
+Group Chat enables multiple agents to participate in a coordinated conversation. An orchestrator manages the conversation flow, deciding which agent speaks next based on:
+
+- Predefined workflows
+- LLM-based role selection
+- Round-robin scheduling
+- Custom orchestration logic
+
+## Basic Group Chat
+
+Create a simple group chat with multiple agents:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using OpenAI;
+
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var openAIClient = new OpenAIClient(apiKey);
+var model = "gpt-4o-mini";
+
+// Create agents
+var coder = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient(model),
+    name: "coder",
+    systemMessage: "You are a C# coder. Write code between ```csharp and ```")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var reviewer = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient(model),
+    name: "reviewer",
+    systemMessage: "You review code for correctness and best practices")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var user = new DefaultReplyAgent(
+    name: "user",
+    defaultReply: "END")
+    .RegisterPrintMessage();
+
+// Create admin agent to orchestrate
+var admin = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient(model),
+    name: "admin")
+    .RegisterMessageConnector();
+
+// Create group chat
+var group = new GroupChat(
+    members: [coder, reviewer, user],
+    admin: admin);
+
+// Start conversation
+var chatHistory = new List<IMessage>
+{
+    new TextMessage(Role.User, "Write a C# function to calculate factorial")
+};
+
+var result = await group.CallAsync(chatHistory, maxRound: 10);
+```
+
+## Orchestration Strategies
+
+AutoGen provides multiple orchestrators to control conversation flow:
+
+### RolePlayOrchestrator
+
+Uses an admin agent and optional workflow to select speakers:
+
+```csharp
+var admin = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4"),
+    name: "admin",
+    systemMessage: "You coordinate the team and select the next speaker")
+    .RegisterMessageConnector();
+
+var group = new GroupChat(
+    members: [coder, reviewer, tester],
+    admin: admin);
+```
+
+The admin agent:
+- Analyzes conversation history
+- Decides which agent should speak next
+- Considers the workflow if provided
+
+### WorkflowOrchestrator
+
+Follows a predefined workflow without an admin:
+
+```csharp
+using AutoGen.Core;
+
+// Define workflow transitions
+var workflow = new Graph();
+workflow.AddTransition(Transition.Create(coder, reviewer));
+workflow.AddTransition(Transition.Create(reviewer, user));
+
+var group = new GroupChat(
+    members: [coder, reviewer, user],
+    workflow: workflow);
+```
+
+### RoundRobinOrchestrator
+
+Agents speak in sequential order:
+
+```csharp
+var orchestrator = new RoundRobinOrchestrator();
+
+var group = new GroupChat(
+    members: [agent1, agent2, agent3],
+    orchestrator: orchestrator);
+```
+
+### Custom Orchestrator
+
+Implement `IOrchestrator` for custom logic:
+
+```csharp
+public class CustomOrchestrator : IOrchestrator
+{
+    public Task<IAgent?> GetNextSpeakerAsync(
+        OrchestrationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var lastMessage = context.ChatHistory.LastOrDefault();
+        
+        // Custom logic to select next speaker
+        if (lastMessage?.From == "coder")
+            return Task.FromResult(context.Candidates
+                .FirstOrDefault(a => a.Name == "reviewer"));
+        
+        // Return null to end conversation
+        return Task.FromResult<IAgent?>(null);
+    }
+}
+
+var group = new GroupChat(
+    members: [coder, reviewer],
+    orchestrator: new CustomOrchestrator());
+```
+
+## Workflow-Based Conversations
+
+Define explicit conversation flows using graphs:
+
+<Steps>
+  <Step title="Create agents">
+    ```csharp
+    var coder = new OpenAIChatAgent(
+        chatClient: openAIClient.GetChatClient(model),
+        name: "coder",
+        systemMessage: "You write C# code")
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    var commenter = new OpenAIChatAgent(
+        chatClient: openAIClient.GetChatClient(model),
+        name: "commenter",
+        systemMessage: "You add inline comments to code")
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    var user = new DefaultReplyAgent("user", "END")
+        .RegisterPrintMessage();
+    ```
+  </Step>
+
+  <Step title="Define workflow">
+    ```csharp
+    // User -> Coder -> Commenter -> User
+    var workflow = new Graph();
+    workflow.AddTransition(Transition.Create(user, coder));
+    workflow.AddTransition(Transition.Create(coder, commenter));
+    workflow.AddTransition(Transition.Create(commenter, user));
+    ```
+  </Step>
+
+  <Step title="Create group chat">
+    ```csharp
+    var group = new GroupChat(
+        members: [coder, commenter, user],
+        workflow: workflow);
+    ```
+  </Step>
+
+  <Step title="Run conversation">
+    ```csharp
+    var instruction = new TextMessage(
+        Role.User,
+        @"Workflow:
+        User asks question -> Coder writes code -> 
+        Commenter adds comments -> User confirms");
+
+    var question = new TextMessage(
+        Role.User,
+        "Write a function to check if a number is prime");
+
+    var history = new List<IMessage> { instruction, question };
+    var result = await group.CallAsync(history, maxRound: 10);
+    ```
+  </Step>
+</Steps>
+
+## Dynamic Group Chat Example
+
+Complete example with Semantic Kernel integration:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using AutoGen.SemanticKernel;
+using AutoGen.SemanticKernel.Extension;
+using Microsoft.SemanticKernel;
+using OpenAI;
+
+public class DynamicGroupChatExample
+{
+    public static async Task RunAsync()
+    {
+        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var model = "gpt-4o-mini";
+        var openAIClient = new OpenAIClient(apiKey);
+
+        // Create coder with OpenAI
+        var coder = new OpenAIChatAgent(
+            chatClient: openAIClient.GetChatClient(model),
+            name: "coder",
+            systemMessage: @"
+                You are a C# coder.
+                When writing code, put it between ```csharp and ```
+            ")
+            .RegisterMessageConnector()
+            .RegisterPrintMessage();
+
+        // Create commenter with Semantic Kernel
+        var kernel = Kernel
+            .CreateBuilder()
+            .AddOpenAIChatCompletion(modelId: model, apiKey: apiKey)
+            .Build();
+            
+        var commenter = new SemanticKernelAgent(
+            kernel: kernel,
+            name: "commenter",
+            systemMessage: @"
+                You write inline comments for code.
+                Add unit tests if necessary.
+            ")
+            .RegisterMessageConnector()
+            .RegisterPrintMessage();
+
+        // Create user proxy
+        var userProxy = new DefaultReplyAgent("user", defaultReply: "END")
+            .RegisterPrintMessage();
+
+        // Create admin for orchestration
+        var admin = new OpenAIChatAgent(
+            chatClient: openAIClient.GetChatClient(model),
+            name: "admin")
+            .RegisterMessageConnector();
+
+        // Create group
+        var group = new GroupChat(
+            members: [coder, commenter, userProxy],
+            admin: admin);
+
+        // Define workflow instruction
+        var workflowInstruction = new TextMessage(
+            Role.User,
+            @"
+            Workflow:
+            User asks question -> Coder writes code
+            Coder writes code -> Commenter adds comments
+            Commenter adds comments -> User ends with END
+            ");
+
+        var question = new TextMessage(
+            Role.User,
+            "How to calculate the 100th Fibonacci number?");
+
+        var chatHistory = new List<IMessage> { workflowInstruction, question };
+        
+        // Run group chat
+        while (true)
+        {
+            var replies = await group.CallAsync(chatHistory, maxRound: 1);
+            var lastReply = replies.Last();
+            chatHistory.Add(lastReply);
+
+            if (lastReply.From == userProxy.Name)
+            {
+                break;
+            }
+        }
+
+        // Summarize conversation
+        var summary = await coder.SendAsync(
+            "Summarize the conversation",
+            chatHistory: chatHistory);
+    }
+}
+```
+
+## Initialize Messages
+
+Provide context that persists across conversations:
+
+```csharp
+var contextMessages = new List<IMessage>
+{
+    new TextMessage(Role.System, "You are working on a financial application"),
+    new TextMessage(Role.System, "Follow company coding standards"),
+    new TextMessage(Role.System, "All currency calculations use decimal type")
+};
+
+var group = new GroupChat(
+    members: agents,
+    admin: admin,
+    initializeMessages: contextMessages);
+```
+
+## Managing Conversation Flow
+
+### Termination
+
+End conversations gracefully:
+
+```csharp
+// Terminate by message content
+var message = TextMessage.CreateGroupChatTerminateMessage("Task completed");
+
+// Check if message is termination
+if (message.IsGroupChatTerminateMessage())
+{
+    Console.WriteLine("Conversation ended");
+}
+```
+
+### Max Rounds
+
+Limit conversation length:
+
+```csharp
+// Stop after 10 agent responses
+var result = await group.CallAsync(chatHistory, maxRound: 10);
+```
+
+### Manual Control
+
+Step through conversation manually:
+
+```csharp
+var history = new List<IMessage> { initialMessage };
+
+for (int i = 0; i < maxRounds; i++)
+{
+    var replies = await group.CallAsync(history, maxRound: 1);
+    var lastReply = replies.Last();
+    
+    Console.WriteLine($"Round {i + 1}: {lastReply.From} said: {lastReply.GetContent()}");
+    
+    history.Add(lastReply);
+    
+    if (ShouldTerminate(lastReply))
+    {
+        break;
+    }
+}
+```
+
+## Advanced Patterns
+
+### Nested Group Chats
+
+Create hierarchical agent structures:
+
+```csharp
+// Backend team
+var backendGroup = new GroupChat(
+    members: [backendDev, dbExpert],
+    admin: backendLead);
+
+// Frontend team
+var frontendGroup = new GroupChat(
+    members: [frontendDev, uiDesigner],
+    admin: frontendLead);
+
+// Main project group
+var projectGroup = new GroupChat(
+    members: [backendLead, frontendLead, projectManager],
+    admin: architect);
+```
+
+### Conditional Workflows
+
+Branching logic based on message content:
+
+```csharp
+public class ConditionalOrchestrator : IOrchestrator
+{
+    public Task<IAgent?> GetNextSpeakerAsync(
+        OrchestrationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var lastMessage = context.ChatHistory.LastOrDefault();
+        var content = lastMessage?.GetContent()?.ToLower();
+
+        // Route based on keywords
+        if (content?.Contains("bug") == true)
+            return Task.FromResult(context.Candidates
+                .FirstOrDefault(a => a.Name == "debugger"));
+        
+        if (content?.Contains("test") == true)
+            return Task.FromResult(context.Candidates
+                .FirstOrDefault(a => a.Name == "tester"));
+        
+        if (content?.Contains("deploy") == true)
+            return Task.FromResult(context.Candidates
+                .FirstOrDefault(a => a.Name == "devops"));
+
+        return Task.FromResult<IAgent?>(null);
+    }
+}
+```
+
+### Priority-Based Selection
+
+```csharp
+public class PriorityOrchestrator : IOrchestrator
+{
+    private readonly Dictionary<string, int> _priorities;
+
+    public PriorityOrchestrator(Dictionary<string, int> priorities)
+    {
+        _priorities = priorities;
+    }
+
+    public Task<IAgent?> GetNextSpeakerAsync(
+        OrchestrationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        // Select agent with highest priority that hasn't spoken recently
+        var recentSpeakers = context.ChatHistory
+            .TakeLast(3)
+            .Select(m => m.From)
+            .ToHashSet();
+
+        var nextAgent = context.Candidates
+            .Where(a => !recentSpeakers.Contains(a.Name))
+            .OrderByDescending(a => _priorities.GetValueOrDefault(a.Name, 0))
+            .FirstOrDefault();
+
+        return Task.FromResult(nextAgent);
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Agent Roles">
+    - Give each agent a clear, specific role
+    - Avoid overlapping responsibilities
+    - Use descriptive names (e.g., "coder", "reviewer", "tester")
+    - Document roles in system messages
+  </Accordion>
+  
+  <Accordion title="Workflow Design">
+    - Keep workflows simple and linear when possible
+    - Use admin-based orchestration for complex logic
+    - Provide clear workflow instructions in initial messages
+    - Test workflows with different scenarios
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Set reasonable `maxRound` limits
+    - Use `DefaultReplyAgent` for simple responses
+    - Cache responses when appropriate
+    - Monitor token usage across all agents
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    ```csharp
+    try
+    {
+        var result = await group.CallAsync(history, maxRound: 10);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Group chat error: {ex.Message}");
+        // Implement retry or fallback logic
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Add tools to group chat agents
+  </Card>
+  
+  <Card title="Code Execution" icon="terminal" href="/dotnet/code-execution">
+    Execute code in group conversations
+  </Card>
+  
+  <Card title="Agents" icon="robot" href="/dotnet/agents">
+    Learn more about agent types
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples">
+    See complete group chat examples
+  </Card>
+</CardGroup>

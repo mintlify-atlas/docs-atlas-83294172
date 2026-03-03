@@ -1,0 +1,308 @@
+---
+title: Memory
+description: Memory and state management in AgentChat
+icon: database
+---
+
+Memory systems allow agents to retrieve relevant context from past conversations, documents, or external knowledge bases.
+
+## Overview
+
+AgentChat supports memory through the `Memory` interface. Agents can query memory systems to augment their context before generating responses.
+
+```python
+from autogen_agentchat.agents import AssistantAgent
+from autogen_core.memory import Memory
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+# Create agent with memory
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    memory=[memory_system]  # List of memory systems
+)
+```
+
+## Memory interface
+
+Memory systems implement the `Memory` protocol:
+
+```python
+from autogen_core.memory import Memory
+from typing import List
+
+class CustomMemory(Memory):
+    async def query(self, query: str) -> List[str]:
+        """Query memory and return relevant documents.
+        
+        Args:
+            query: The search query
+            
+        Returns:
+            List of relevant text snippets
+        """
+        # Your retrieval logic here
+        return ["relevant document 1", "relevant document 2"]
+```
+
+## Vector memory
+
+For semantic search over documents:
+
+```python
+from autogen_ext.memory import VectorMemory
+from autogen_ext.memory.embeddings import OpenAIEmbeddings
+
+# Create embeddings
+embeddings = OpenAIEmbeddings(api_key="sk-...")
+
+# Create vector memory
+memory = VectorMemory(
+    embeddings=embeddings,
+    collection_name="my_docs"
+)
+
+# Add documents
+await memory.add_documents([
+    "AutoGen is a framework for building AI agents.",
+    "Agents can use tools to interact with external systems.",
+    "Teams orchestrate multiple agents working together."
+])
+
+# Query
+results = await memory.query("What are teams?")
+print(results)  # ["Teams orchestrate multiple agents working together."]
+```
+
+## Agent state
+
+Agents maintain state across messages through `AgentState`:
+
+```python
+from autogen_agentchat.state import AssistantAgentState
+
+# Get agent state
+state = agent.get_state()
+print(state.llm_messages)  # Message history
+print(state.tool_use)  # Tool call history
+
+# Save state
+state_dict = agent.save_state()
+
+# Load state (e.g., after restart)
+agent.load_state(state_dict)
+```
+
+## Team state
+
+Teams also maintain state:
+
+```python
+from autogen_agentchat.teams import RoundRobinGroupChat
+
+team = RoundRobinGroupChat([agent1, agent2])
+
+# Run team
+result = await team.run(task="Solve a problem")
+
+# Access team state
+team_state = team.state
+print(team_state.messages)  # All messages in team conversation
+```
+
+## Conversation history
+
+Agents automatically maintain conversation history:
+
+```python
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client
+)
+
+# First interaction
+result1 = await agent.run(task="My name is Alice")
+
+# Later interaction - agent remembers
+result2 = await agent.run(task="What's my name?")
+print(result2.messages[-1].content)  # "Your name is Alice"
+```
+
+## Context management
+
+Control how much context is sent to the LLM:
+
+```python
+from autogen_core.model_context import (
+    UnboundedChatCompletionContext,
+    BufferedChatCompletionContext
+)
+
+# Unlimited context (default)
+context = UnboundedChatCompletionContext()
+
+# Or: Limited context window
+context = BufferedChatCompletionContext(buffer_size=10)  # Last 10 messages
+
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    model_context=context
+)
+```
+
+## Memory with RAG
+
+Combine memory with Retrieval-Augmented Generation:
+
+```python
+import asyncio
+from autogen_core.memory import Memory
+
+class RAGMemory(Memory):
+    def __init__(self, vector_store):
+        self.vector_store = vector_store
+    
+    async def query(self, query: str) -> List[str]:
+        # Retrieve top-k relevant documents
+        results = await self.vector_store.similarity_search(
+            query, k=5
+        )
+        return [doc.text for doc in results]
+
+# Use with agent
+rag_memory = RAGMemory(your_vector_store)
+
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    memory=[rag_memory]
+)
+
+# Agent will query memory before responding
+result = await agent.run(task="What did we discuss about tools?")
+```
+
+## Persistent memory
+
+Save and restore agent state across sessions:
+
+```python
+import json
+
+# After conversation
+state = agent.save_state()
+
+# Save to file
+with open("agent_state.json", "w") as f:
+    json.dump(state, f)
+
+# Later: Restore from file
+with open("agent_state.json", "r") as f:
+    state = json.load(f)
+
+agent.load_state(state)
+# Agent continues from previous state
+```
+
+## Memory events
+
+Agents emit memory query events:
+
+```python
+from autogen_agentchat.messages import MemoryQueryEvent
+
+# Listen for memory queries
+async for event in agent.run_stream(task="..."):
+    if isinstance(event, MemoryQueryEvent):
+        print(f"Queried memory: {event.query}")
+        print(f"Retrieved: {event.results}")
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use semantic search for large document sets">
+    Vector memory with embeddings is ideal for searching large knowledge bases.
+  </Accordion>
+  
+  <Accordion title="Limit context window for long conversations">
+    Use `BufferedChatCompletionContext` to prevent context overflow and reduce costs.
+  </Accordion>
+  
+  <Accordion title="Separate short-term and long-term memory">
+    Keep recent conversation in agent state, use vector memory for long-term knowledge.
+  </Accordion>
+  
+  <Accordion title="Persist important state">
+    Save agent state after critical interactions for recovery and continuity.
+  </Accordion>
+</AccordionGroup>
+
+## Memory integration examples
+
+### Example: FAQ bot with memory
+
+```python
+from autogen_ext.memory import VectorMemory
+from autogen_ext.memory.embeddings import OpenAIEmbeddings
+
+# Load FAQ documents into memory
+faqs = [
+    "Q: What is AutoGen? A: A framework for building AI agents.",
+    "Q: How do I install? A: pip install autogen-agentchat",
+    # ... more FAQs
+]
+
+memory = VectorMemory(embeddings=OpenAIEmbeddings())
+await memory.add_documents(faqs)
+
+# Create FAQ agent
+faq_agent = AssistantAgent(
+    "faq_bot",
+    model_client=model_client,
+    memory=[memory],
+    system_message="Answer questions using the provided FAQ knowledge."
+)
+
+result = await faq_agent.run(task="How do I install AutoGen?")
+```
+
+### Example: Conversation summarization
+
+```python
+from autogen_core.model_context import BufferedChatCompletionContext
+
+# Keep only recent messages
+context = BufferedChatCompletionContext(buffer_size=20)
+
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    model_context=context,
+    system_message="You are a helpful assistant. Summarize long discussions."
+)
+
+# Long conversation - only last 20 messages sent to LLM
+for i in range(50):
+    await agent.run(task=f"Message {i}")
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Memory Guide" icon="book" href="/extensions/memory">
+    Advanced memory patterns
+  </Card>
+  <Card title="State Management" icon="floppy-disk" href="/agentchat/orchestration-patterns#state-management">
+    Team state patterns
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/research-assistant">
+    See memory in action
+  </Card>
+  <Card title="Custom Agents" icon="hammer" href="/guides/custom-agents">
+    Build memory-aware agents
+  </Card>
+</CardGroup>

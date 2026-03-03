@@ -1,0 +1,233 @@
+---
+title: Agents
+description: Pre-built agent types in AgentChat
+icon: robot
+---
+
+AgentChat provides several pre-built agent types for common use cases. All agents implement the `BaseChatAgent` interface.
+
+## AssistantAgent
+
+The most commonly used agent type. It uses an LLM to generate responses and can call tools.
+
+```python
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    system_message="You are a helpful assistant.",
+    description="A general-purpose assistant agent",
+    tools=[],  # List of tools
+    handoffs=[],  # List of agents this agent can hand off to
+    model_client_stream=True,  # Enable streaming
+    reflect_on_tool_use=False,  # Reflect on tool results before responding
+    max_tool_iterations=10  # Max tool calling rounds
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" required>
+  Unique identifier for the agent
+</ParamField>
+
+<ParamField path="model_client" type="ChatCompletionClient" required>
+  The LLM client (OpenAI, Anthropic, etc.)
+</ParamField>
+
+<ParamField path="system_message" type="str">
+  Defines the agent's behavior and persona
+</ParamField>
+
+<ParamField path="description" type="str">
+  Description used by other agents to understand this agent's role
+</ParamField>
+
+<ParamField path="tools" type="List[BaseTool]">
+  Tools the agent can use. Can be functions, MCP servers, or custom tools
+</ParamField>
+
+<ParamField path="handoffs" type="List[Handoff | str]">
+  Other agents this agent can transfer tasks to
+</ParamField>
+
+<ParamField path="model_client_stream" type="bool" default="False">
+  Enable streaming responses from the model
+</ParamField>
+
+<ParamField path="reflect_on_tool_use" type="bool" default="False">
+  Whether the agent should reflect on tool results before responding
+</ParamField>
+
+<ParamField path="max_tool_iterations" type="int" default="10">
+  Maximum number of tool calling rounds before stopping
+</ParamField>
+
+<ParamField path="memory" type="List[Memory]">
+  Memory systems for context retrieval
+</ParamField>
+
+## CodeExecutorAgent
+
+An agent specialized in executing code safely in isolated environments.
+
+```python
+from autogen_agentchat.agents import CodeExecutorAgent
+from autogen_ext.code_executors import DockerCommandLineCodeExecutor
+
+# Create code executor (uses Docker for isolation)
+executor = DockerCommandLineCodeExecutor()
+
+agent = CodeExecutorAgent(
+    name="code_executor",
+    code_executor=executor,
+    description="Executes Python and bash code"
+)
+```
+
+<Note>
+CodeExecutorAgent requires a code executor backend (Docker, local, or Jupyter). See [Code Executors](/extensions/code-executors) for more details.
+</Note>
+
+### Parameters
+
+<ParamField path="name" type="str" required>
+  Agent identifier
+</ParamField>
+
+<ParamField path="code_executor" type="CodeExecutor" required>
+  The code execution backend (Docker, local, or Jupyter)
+</ParamField>
+
+<ParamField path="description" type="str">
+  Description for other agents
+</ParamField>
+
+## UserProxyAgent
+
+An agent that requests human input for decision-making.
+
+```python
+from autogen_agentchat.agents import UserProxyAgent
+
+agent = UserProxyAgent(
+    name="user",
+    description="Human user for approvals and feedback"
+)
+```
+
+When used in a team, the UserProxyAgent will prompt for human input when it's the agent's turn to respond.
+
+## SocietyOfMindAgent
+
+An agent that encapsulates a team of agents, presenting them as a single agent to the outside.
+
+```python
+from autogen_agentchat.agents import SocietyOfMindAgent, AssistantAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+# Create inner team
+researcher = AssistantAgent("researcher", model_client=model_client)
+writer = AssistantAgent("writer", model_client=model_client)
+inner_team = RoundRobinGroupChat([researcher, writer])
+
+# Wrap team as single agent
+som_agent = SocietyOfMindAgent(
+    name="research_team",
+    team=inner_team,
+    description="A team that researches and writes reports"
+)
+
+# Can now use som_agent as a regular agent in another team
+```
+
+## MessageFilterAgent
+
+An agent that filters messages based on configurable criteria.
+
+```python
+from autogen_agentchat.agents import MessageFilterAgent, PerSourceFilter
+
+# Filter to only show messages from specific sources
+filter_config = PerSourceFilter(
+    allowed_senders=["agent1", "agent2"]
+)
+
+agent = MessageFilterAgent(
+    name="filter",
+    filter_config=filter_config,
+    description="Filters messages from specific agents"
+)
+```
+
+## Creating custom agents
+
+To create a custom agent, inherit from `BaseChatAgent`:
+
+```python
+from autogen_agentchat.base import ChatAgent, Response
+from autogen_agentchat.messages import BaseChatMessage, TextMessage
+from typing import List, Sequence
+
+class CustomAgent(ChatAgent):
+    def __init__(self, name: str, description: str):
+        self._name = name
+        self._description = description
+    
+    @property
+    def name(self) -> str:
+        return self._name
+    
+    @property
+    def description(self) -> str:
+        return self._description
+    
+    async def on_messages(
+        self, 
+        messages: Sequence[BaseChatMessage],
+        cancellation_token: CancellationToken
+    ) -> Response:
+        # Custom logic here
+        return Response(
+            chat_message=TextMessage(
+                content="Custom response",
+                source=self.name
+            )
+        )
+```
+
+See [Custom Agents Guide](/guides/custom-agents) for more details.
+
+## Agent comparison
+
+| Agent Type | Use Case | Requires LLM | Executes Code |
+|------------|----------|--------------|---------------|
+| AssistantAgent | General-purpose with tools | Yes | No |
+| CodeExecutorAgent | Safe code execution | No | Yes |
+| UserProxyAgent | Human input | No | No |
+| SocietyOfMindAgent | Team composition | No (uses inner team) | No |
+| MessageFilterAgent | Message filtering | No | No |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Teams" icon="users" href="/agentchat/teams">
+    Combine agents into teams
+  </Card>
+  <Card title="Tools" icon="wrench" href="/agentchat/tools">
+    Add tools to your agents
+  </Card>
+  <Card title="Custom Agents" icon="hammer" href="/guides/custom-agents">
+    Build your own agent types
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/two-agent-chat">
+    See agents in action
+  </Card>
+</CardGroup>

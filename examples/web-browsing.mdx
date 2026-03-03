@@ -1,0 +1,219 @@
+---
+title: Web Browsing with MCP
+description: Enable agents to browse the web using Model Context Protocol servers
+---
+
+This example demonstrates how to use the Playwright MCP server to give agents web browsing capabilities.
+
+## What You'll Learn
+
+- How to set up and use MCP servers
+- How to create a web browsing assistant
+- How to handle streaming responses with tools
+- Security considerations for MCP servers
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen and MCP">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]" "autogen-ext[tools]"
+    ```
+  </Step>
+  
+  <Step title="Install Playwright MCP Server">
+    ```bash
+    npm install -g @playwright/mcp@latest
+    ```
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## Code Example
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Configure the MCP server
+    server_params = StdioServerParams(
+        command="npx",
+        args=[
+            "@playwright/mcp@latest",
+            "--headless",
+        ],
+    )
+    
+    # Create agent with MCP workbench
+    async with McpWorkbench(server_params) as mcp:
+        agent = AssistantAgent(
+            "web_browsing_assistant",
+            model_client=model_client,
+            workbench=mcp,  # For multiple MCP servers, put them in a list
+            model_client_stream=True,
+            max_tool_iterations=10,
+        )
+        
+        # Run web browsing task
+        await Console(
+            agent.run_stream(
+                task="Find out how many contributors for the microsoft/autogen repository"
+            )
+        )
+    
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python web_browsing.py
+```
+
+## Expected Output
+
+```
+---------- web_browsing_assistant ----------
+[Opening browser...]
+[Navigating to GitHub...]
+[Extracting contributor count...]
+The microsoft/autogen repository has 487 contributors.
+```
+
+## How It Works
+
+1. **MCP Server**: Playwright MCP server provides web automation tools
+2. **McpWorkbench**: Manages the connection to the MCP server
+3. **Tool Discovery**: Agent automatically discovers available tools from the server
+4. **Execution**: Agent uses tools like `navigate`, `screenshot`, `click` to browse the web
+5. **Context Manager**: `async with` ensures proper cleanup of resources
+
+## Available MCP Tools
+
+The Playwright MCP server provides several tools:
+
+- `navigate(url)`: Navigate to a URL
+- `screenshot()`: Take a screenshot of the current page
+- `click(selector)`: Click an element
+- `fill(selector, value)`: Fill a form field
+- `evaluate(script)`: Execute JavaScript
+- `get_text(selector)`: Extract text from elements
+
+## Using Multiple MCP Servers
+
+You can connect to multiple MCP servers simultaneously:
+
+```python
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Configure multiple servers
+    browser_server = StdioServerParams(
+        command="npx",
+        args=["@playwright/mcp@latest", "--headless"],
+    )
+    
+    filesystem_server = StdioServerParams(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "/path/to/directory"],
+    )
+    
+    # Create multiple workbenches
+    async with McpWorkbench(browser_server) as browser_mcp, \
+               McpWorkbench(filesystem_server) as fs_mcp:
+        
+        agent = AssistantAgent(
+            "multi_tool_assistant",
+            model_client=model_client,
+            workbench=[browser_mcp, fs_mcp],  # List of workbenches
+            model_client_stream=True,
+            max_tool_iterations=20,
+        )
+        
+        await Console(
+            agent.run_stream(
+                task="Browse example.com and save the content to a file"
+            )
+        )
+```
+
+## Security Warning
+
+<Warning>
+  Only connect to trusted MCP servers as they may:
+  - Execute commands in your local environment
+  - Access your filesystem
+  - Expose sensitive information
+  - Make network requests
+</Warning>
+
+Always review the MCP server's source code before use in production.
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Research" icon="magnifying-glass">
+    Gather information from multiple websites automatically.
+  </Card>
+  
+  <Card title="Testing" icon="vial">
+    Automate web application testing and validation.
+  </Card>
+  
+  <Card title="Data Extraction" icon="database">
+    Scrape structured data from web pages.
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line">
+    Track changes on websites over time.
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Browser Not Found
+
+If you get a "browser not found" error:
+
+```bash
+npx playwright install chromium
+```
+
+### Connection Timeout
+
+Increase the timeout in server parameters:
+
+```python
+server_params = StdioServerParams(
+    command="npx",
+    args=["@playwright/mcp@latest", "--headless"],
+    env={"PLAYWRIGHT_TIMEOUT": "60000"},
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Code Execution" icon="code" href="/examples/code-execution">
+    Execute code safely within agent workflows
+  </Card>
+  
+  <Card title="Research Assistant" icon="graduation-cap" href="/examples/research-assistant">
+    Build a complete research assistant application
+  </Card>
+</CardGroup>

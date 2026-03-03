@@ -1,80 +1,427 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Build and run your first AutoGen agent in under 5 minutes
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This guide will get you up and running with AutoGen in under 5 minutes. You'll create a simple agent that can use tools to answer questions.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Before you begin, ensure you have:
+
+- Python 3.10 or later installed
+- An OpenAI API key (or another supported LLM provider)
+
+<Info>
+  Don't have an OpenAI API key? Get one at [platform.openai.com](https://platform.openai.com). You can also use other providers like Azure OpenAI, Anthropic, or local models.
+</Info>
+
+## Installation
+
+<Steps>
+  <Step title="Install AutoGen packages">
+    Install both AgentChat and the OpenAI extension:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]"
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    This installs:
+    - `autogen-agentchat`: High-level API for building agents
+    - `autogen-ext[openai]`: OpenAI model client extension
+  </Step>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Step title="Set your API key">
+    Export your OpenAI API key as an environment variable:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <CodeGroup>
+    ```bash Linux/Mac
+    export OPENAI_API_KEY="sk-..."
+    ```
+    
+    ```bash Windows (Command Prompt)
+    set OPENAI_API_KEY=sk-...
+    ```
+    
+    ```powershell Windows (PowerShell)
+    $env:OPENAI_API_KEY="sk-..."
+    ```
+    </CodeGroup>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Verify installation">
+    Check that packages are installed correctly:
+    
+    ```bash
+    python -c "import autogen_agentchat; import autogen_ext.models.openai; print('AutoGen installed successfully!')"
+    ```
+  </Step>
+</Steps>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Hello World: Your First Agent
 
-### Step 3: Go live
+Let's create a simple assistant agent that responds to a task.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Steps>
+  <Step title="Create a Python file">
+    Create a new file called `hello_agent.py`:
+    
+    ```python hello_agent.py
+    import asyncio
+    from autogen_agentchat.agents import AssistantAgent
+    from autogen_ext.models.openai import OpenAIChatCompletionClient
 
-## Next steps
+    async def main() -> None:
+        # Create a model client
+        model_client = OpenAIChatCompletionClient(model="gpt-4o")
+        
+        # Create an assistant agent
+        agent = AssistantAgent(
+            name="assistant",
+            model_client=model_client
+        )
+        
+        # Run the agent with a task
+        result = await agent.run(task="Say 'Hello World!'")
+        print(result)
+        
+        # Clean up
+        await model_client.close()
 
-Now that you have your docs running, explore these key features:
+    # Run the async function
+    asyncio.run(main())
+    ```
+  </Step>
 
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+  <Step title="Run your agent">
+    Execute the script:
+    
+    ```bash
+    python hello_agent.py
+    ```
+    
+    You should see output similar to:
+    
+    ```
+    TaskResult(messages=[TextMessage(source='assistant', content='Hello World!')], stop_reason='Text message returned')
+    ```
+  </Step>
+</Steps>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The agent uses OpenAI's GPT-4o model by default. You can change this to `gpt-4o-mini` for faster/cheaper responses or `gpt-4` for maximum quality.
 </Note>
+
+## Adding Tools to Your Agent
+
+Now let's make it more interesting by giving the agent access to a tool. We'll create a weather agent that can look up weather information.
+
+<Steps>
+  <Step title="Define a tool function">
+    Create a new file called `weather_agent.py`:
+    
+    ```python weather_agent.py
+    import asyncio
+    from autogen_agentchat.agents import AssistantAgent
+    from autogen_agentchat.ui import Console
+    from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+    # Define a tool as a simple Python function
+    async def get_weather(city: str) -> str:
+        """Get the current weather for a given city.
+        
+        Args:
+            city: The name of the city to get weather for
+            
+        Returns:
+            A string describing the weather
+        """
+        # In a real application, you'd call a weather API here
+        return f"The weather in {city} is 73 degrees and sunny."
+
+    async def main() -> None:
+        # Create a model client
+        model_client = OpenAIChatCompletionClient(
+            model="gpt-4o",
+            # api_key="sk-..."  # Optional if OPENAI_API_KEY is set
+        )
+        
+        # Create an agent with the weather tool
+        agent = AssistantAgent(
+            name="weather_agent",
+            model_client=model_client,
+            tools=[get_weather],  # Pass the function directly
+            system_message="You are a helpful weather assistant.",
+            reflect_on_tool_use=True,  # Agent reflects on tool results
+        )
+        
+        # Run with streaming output to the console
+        await Console(
+            agent.run_stream(task="What's the weather in New York?")
+        )
+        
+        # Clean up
+        await model_client.close()
+
+    asyncio.run(main())
+    ```
+  </Step>
+
+  <Step title="Run the weather agent">
+    Execute the script:
+    
+    ```bash
+    python weather_agent.py
+    ```
+    
+    You'll see the agent:
+    1. Receive your question
+    2. Call the `get_weather` tool with `city="New York"`
+    3. Get the tool result
+    4. Formulate a natural language response
+    
+    Output:
+    ```
+    ---------- user ----------
+    What's the weather in New York?
+    ---------- weather_agent ----------
+    [FunctionCall(id='call_...', arguments='{"city":"New York"}', name='get_weather')]
+    ---------- weather_agent ----------
+    [FunctionExecutionResult(content='The weather in New York is 73 degrees and sunny.', call_id='call_...')]
+    ---------- weather_agent ----------
+    The current weather in New York is 73 degrees and sunny.
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  AutoGen automatically:
+  - Converts your Python function into a tool schema
+  - Passes it to the LLM via function calling
+  - Executes the function when the model requests it
+  - Returns results back to the model for final response generation
+</Info>
+
+## Understanding the Code
+
+Let's break down the key components:
+
+### Model Client
+
+```python
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+```
+
+The model client connects to your LLM provider. AutoGen supports many providers through extensions:
+- `OpenAIChatCompletionClient` for OpenAI
+- `AzureOpenAIChatCompletionClient` for Azure OpenAI
+- `AnthropicClient` for Claude
+- And more...
+
+### Assistant Agent
+
+```python
+agent = AssistantAgent(
+    name="weather_agent",
+    model_client=model_client,
+    tools=[get_weather],
+    system_message="You are a helpful weather assistant.",
+    reflect_on_tool_use=True,
+)
+```
+
+The `AssistantAgent` is a pre-configured agent type that:
+- Uses an LLM to process messages
+- Can call tools when needed
+- Reflects on tool results when `reflect_on_tool_use=True`
+- Follows instructions in the `system_message`
+
+### Running the Agent
+
+```python
+result = await agent.run(task="Your task here")
+```
+
+The `run()` method executes the agent and returns a `TaskResult` with:
+- All messages exchanged
+- The final stop reason
+- Usage statistics
+
+For streaming output, use `run_stream()` with the `Console` helper:
+
+```python
+await Console(agent.run_stream(task="Your task"))
+```
+
+## Next Steps
+
+Congratulations! You've created your first AutoGen agent. Here's what to explore next:
+
+<CardGroup cols={2}>
+  <Card
+    title="Core Concepts"
+    icon="book"
+    href="/concepts"
+  >
+    Understand agents, teams, tools, and the architecture
+  </Card>
+  <Card
+    title="Multi-Agent Teams"
+    icon="users"
+    href="/agentchat/teams"
+  >
+    Create teams of agents that collaborate on complex tasks
+  </Card>
+  <Card
+    title="Advanced Tools"
+    icon="wrench"
+    href="/agentchat/tools"
+  >
+    Integrate MCP servers, code execution, and custom tools
+  </Card>
+  <Card
+    title="Example Gallery"
+    icon="images"
+    href="/examples/overview"
+  >
+    Browse complete examples and use cases
+  </Card>
+</CardGroup>
+
+## Common Next Tasks
+
+### Use a Different Model Provider
+
+Switch to Azure OpenAI:
+
+```python
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+
+model_client = AzureOpenAIChatCompletionClient(
+    azure_deployment="your-deployment",
+    model="gpt-4o",
+    api_version="2024-02-15-preview",
+    azure_endpoint="https://your-resource.openai.azure.com",
+)
+```
+
+Or use Anthropic Claude:
+
+```python
+from autogen_ext.models.anthropic import AnthropicClient
+
+model_client = AnthropicClient(
+    model="claude-3-5-sonnet-20241022",
+    api_key="your-anthropic-key",
+)
+```
+
+### Add Multiple Tools
+
+Agents can use multiple tools:
+
+```python
+async def calculate(expression: str) -> float:
+    """Evaluate a mathematical expression."""
+    return eval(expression)
+
+async def search(query: str) -> str:
+    """Search the web for information."""
+    # Call your search API
+    return f"Search results for: {query}"
+
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    tools=[get_weather, calculate, search],  # Multiple tools
+)
+```
+
+### Create a Multi-Agent Team
+
+Combine multiple agents:
+
+```python
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import TextMentionTermination
+
+# Create specialized agents
+writer = AssistantAgent("writer", model_client, system_message="You write content.")
+reviewer = AssistantAgent("reviewer", model_client, system_message="You review content.")
+
+# Create a team
+team = RoundRobinGroupChat(
+    participants=[writer, reviewer],
+    termination_condition=TextMentionTermination("APPROVED"),
+)
+
+# Run the team
+result = await team.run(task="Write a short poem about AI")
+```
+
+<Note>
+  Teams are covered in detail in the [AgentChat documentation](/agentchat/teams).
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Module not found errors">
+    Make sure you installed both packages:
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]"
+    ```
+    
+    If using a virtual environment, ensure it's activated.
+  </Accordion>
+
+  <Accordion title="API key errors">
+    Verify your API key is set correctly:
+    ```bash
+    echo $OPENAI_API_KEY  # Linux/Mac
+    echo %OPENAI_API_KEY%  # Windows CMD
+    ```
+    
+    Or pass it explicitly:
+    ```python
+    model_client = OpenAIChatCompletionClient(
+        model="gpt-4o",
+        api_key="sk-...",
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Async/await issues">
+    AutoGen uses async/await throughout. If running in a Jupyter notebook, you can use `await` directly:
+    ```python
+    result = await agent.run(task="...")
+    ```
+    
+    In a Python script, wrap in `asyncio.run()`:
+    ```python
+    asyncio.run(main())
+    ```
+  </Accordion>
+
+  <Accordion title="Rate limit errors">
+    If you hit rate limits:
+    - Use a smaller/cheaper model like `gpt-4o-mini`
+    - Add delays between requests
+    - Check your OpenAI usage limits
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+If you run into issues:
+
+- Check the [Installation guide](/installation) for detailed setup instructions
+- Browse [Examples](/examples/overview) for more code samples
+- Ask questions on [GitHub Discussions](https://github.com/microsoft/autogen/discussions)
+- Join the [Discord community](https://aka.ms/autogen-discord)
+
+<Info>
+  Ready to learn more? Continue to [Core Concepts](/concepts) to understand how AutoGen works under the hood.
+</Info>

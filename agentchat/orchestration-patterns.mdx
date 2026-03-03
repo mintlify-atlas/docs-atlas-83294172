@@ -1,0 +1,348 @@
+---
+title: Orchestration patterns
+description: Advanced multi-agent orchestration patterns
+icon: sitemap
+---
+
+Orchestration patterns define how multiple agents collaborate to accomplish complex tasks. This guide covers advanced patterns beyond the basic team types.
+
+## Sequential workflow
+
+Agents work in a fixed pipeline, each performing a specific stage:
+
+```python
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+
+# Define stages
+planner = AssistantAgent(
+    "planner",
+    model_client=model_client,
+    system_message="Create detailed plans."
+)
+
+implementer = AssistantAgent(
+    "implementer",
+    model_client=model_client,
+    system_message="Implement the plan with code."
+)
+
+reviewer = AssistantAgent(
+    "reviewer",
+    model_client=model_client,
+    system_message="Review and provide feedback."
+)
+
+# Sequential pipeline
+team = RoundRobinGroupChat(
+    participants=[planner, implementer, reviewer],
+    termination_condition=MaxMessageTermination(max_messages=10)
+)
+```
+
+**Use case**: Multi-stage workflows (plan → execute → review)
+
+## Dynamic routing
+
+Route tasks to specialized agents based on content:
+
+```python
+from autogen_agentchat.teams import Swarm
+from autogen_agentchat.base import Handoff
+
+# Triage agent routes to specialists
+triage = AssistantAgent(
+    "triage",
+    model_client=model_client,
+    system_message="Route requests to the appropriate specialist.",
+    handoffs=[
+        Handoff(target="sales", message="Sales inquiry"),
+        Handoff(target="support", message="Technical support"),
+        Handoff(target="billing", message="Billing question")
+    ]
+)
+
+sales = AssistantAgent("sales", model_client=model_client)
+support = AssistantAgent("support", model_client=model_client)
+billing = AssistantAgent("billing", model_client=model_client)
+
+team = Swarm(
+    participants=[triage, sales, support, billing]
+)
+```
+
+**Use case**: Customer service, help desk systems
+
+## Hierarchical teams
+
+Nest teams within teams for complex hierarchies:
+
+```python
+from autogen_agentchat.agents import SocietyOfMindAgent
+from autogen_agentchat.teams import RoundRobinGroupChat, SelectorGroupChat
+
+# Backend team
+backend_dev = AssistantAgent("backend_dev", model_client=model_client)
+db_expert = AssistantAgent("db_expert", model_client=model_client)
+backend_team = RoundRobinGroupChat([backend_dev, db_expert])
+
+# Frontend team
+frontend_dev = AssistantAgent("frontend_dev", model_client=model_client)
+ux_designer = AssistantAgent("ux_designer", model_client=model_client)
+frontend_team = RoundRobinGroupChat([frontend_dev, ux_designer])
+
+# Wrap teams as agents
+backend_agent = SocietyOfMindAgent("backend_team", team=backend_team)
+frontend_agent = SocietyOfMindAgent("frontend_team", team=frontend_team)
+
+# Top-level team
+project_team = SelectorGroupChat(
+    participants=[backend_agent, frontend_agent]
+)
+```
+
+**Use case**: Large organizations, complex projects with sub-teams
+
+## Iterative refinement
+
+Agents iterate until quality criteria are met:
+
+```python
+from autogen_agentchat.teams import GraphFlow, DiGraphBuilder
+
+writer = AssistantAgent(
+    "writer",
+    model_client=model_client,
+    system_message="Write content."
+)
+
+critic = AssistantAgent(
+    "critic",
+    model_client=model_client,
+    system_message="Critique and suggest improvements."
+)
+
+# Build iterative graph
+builder = DiGraphBuilder()
+builder.add_node("write", writer)
+builder.add_node("critique", critic)
+
+# Always go from write to critique
+builder.add_edge("write", "critique")
+
+# Conditional: if approved, end; else rewrite
+def should_continue(state) -> str:
+    last_msg = state.messages[-1].content
+    if "approved" in last_msg.lower():
+        return "end"
+    return "write"
+
+builder.add_conditional_edge("critique", should_continue)
+
+graph = builder.build()
+team = GraphFlow(graph=graph, initial_state="write")
+```
+
+**Use case**: Content generation, code review, quality assurance
+
+## Parallel execution
+
+Multiple agents work on different parts simultaneously:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+
+# Create specialized agents
+researcher = AssistantAgent("researcher", model_client=model_client)
+data_analyst = AssistantAgent("data_analyst", model_client=model_client)
+visualizer = AssistantAgent("visualizer", model_client=model_client)
+
+# Run tasks in parallel
+async def parallel_workflow(topic: str):
+    tasks = [
+        researcher.run(task=f"Research {topic}"),
+        data_analyst.run(task=f"Analyze data for {topic}"),
+        visualizer.run(task=f"Create visualizations for {topic}")
+    ]
+    
+    # Wait for all to complete
+    results = await asyncio.gather(*tasks)
+    
+    # Combine results
+    return combine_results(results)
+
+result = await parallel_workflow("Climate change")
+```
+
+**Use case**: Independent subtasks, research projects
+
+## Consensus building
+
+Multiple agents vote or negotiate on decisions:
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat
+
+# Multiple expert agents
+expert1 = AssistantAgent("expert1", model_client=model_client)
+expert2 = AssistantAgent("expert2", model_client=model_client)
+expert3 = AssistantAgent("expert3", model_client=model_client)
+
+# Moderator facilitates discussion
+moderator = AssistantAgent(
+    "moderator",
+    model_client=model_client,
+    system_message="""
+    Facilitate expert discussion and build consensus.
+    After hearing all opinions, summarize and propose a final decision.
+    """
+)
+
+team = SelectorGroupChat(
+    participants=[moderator, expert1, expert2, expert3],
+    model_client=model_client
+)
+```
+
+**Use case**: Decision-making, strategic planning
+
+## Human-in-the-loop
+
+Incorporate human input at critical decision points:
+
+```python
+from autogen_agentchat.agents import UserProxyAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+
+# Agents + human
+proposal_agent = AssistantAgent("proposer", model_client=model_client)
+human = UserProxyAgent("human")  # Requests human input
+executor = AssistantAgent("executor", model_client=model_client)
+
+team = RoundRobinGroupChat(
+    participants=[proposal_agent, human, executor]
+)
+
+# Human approves/rejects proposals before execution
+```
+
+**Use case**: High-stakes decisions, compliance, approvals
+
+## Adaptive orchestration
+
+Agent selection adapts based on performance:
+
+```python
+class AdaptiveSelector:
+    def __init__(self, agents):
+        self.agents = agents
+        self.performance = {agent.name: 1.0 for agent in agents}
+    
+    def select_agent(self, task: str):
+        # Select based on performance scores
+        best = max(self.agents, key=lambda a: self.performance[a.name])
+        return best
+    
+    def update_performance(self, agent_name: str, success: bool):
+        # Update based on outcomes
+        if success:
+            self.performance[agent_name] *= 1.1
+        else:
+            self.performance[agent_name] *= 0.9
+```
+
+**Use case**: Long-running systems, continuous improvement
+
+## State management
+
+Share state across agents:
+
+```python
+from dataclasses import dataclass
+from typing import Dict, Any
+
+@dataclass
+class SharedState:
+    context: Dict[str, Any]
+    current_task: str
+    progress: float
+
+class StatefulAgent(AssistantAgent):
+    def __init__(self, name: str, model_client, shared_state: SharedState):
+        super().__init__(name, model_client=model_client)
+        self.shared_state = shared_state
+    
+    async def on_messages(self, messages, cancellation_token):
+        # Access shared state
+        context = self.shared_state.context
+        
+        # Process with context
+        response = await super().on_messages(messages, cancellation_token)
+        
+        # Update shared state
+        self.shared_state.progress += 0.1
+        
+        return response
+
+# Create agents with shared state
+shared = SharedState(context={}, current_task="", progress=0.0)
+agent1 = StatefulAgent("agent1", model_client, shared)
+agent2 = StatefulAgent("agent2", model_client, shared)
+```
+
+**Use case**: Complex workflows requiring shared context
+
+## Pattern comparison
+
+| Pattern | Complexity | Control | Use Case |
+|---------|------------|---------|----------|
+| Sequential | Low | Fixed order | Pipelines |
+| Dynamic routing | Medium | Content-based | Triage systems |
+| Hierarchical | High | Structured | Large organizations |
+| Iterative refinement | Medium | Quality-driven | Content creation |
+| Parallel execution | Medium | Independent tasks | Research |
+| Consensus building | Medium | Group decision | Strategic planning |
+| Human-in-the-loop | Low | Human oversight | Approvals |
+| Adaptive | High | Performance-based | Long-running systems |
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Start simple">
+    Begin with basic patterns (RoundRobin, Selector) before implementing complex orchestration.
+  </Accordion>
+  
+  <Accordion title="Clear agent roles">
+    Each agent should have a well-defined, focused role. Avoid overlap.
+  </Accordion>
+  
+  <Accordion title="Define clear termination">
+    Always set explicit termination conditions to prevent infinite loops.
+  </Accordion>
+  
+  <Accordion title="Monitor costs">
+    Complex orchestration can lead to many LLM calls. Track token usage.
+  </Accordion>
+  
+  <Accordion title="Test incrementally">
+    Test each agent individually before combining into teams.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Multi-Agent Workflows" icon="book" href="/guides/multi-agent-workflows">
+    Comprehensive workflow guide
+  </Card>
+  <Card title="Graph Orchestration" icon="code" href="/examples/graph-orchestration">
+    Build custom graph workflows
+  </Card>
+  <Card title="Swarm Pattern" icon="code" href="/examples/swarm-pattern">
+    Dynamic routing example
+  </Card>
+  <Card title="Custom Agents" icon="hammer" href="/guides/custom-agents">
+    Build orchestration-aware agents
+  </Card>
+</CardGroup>

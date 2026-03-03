@@ -1,0 +1,315 @@
+---
+title: 'Installation'
+description: 'Install AutoGen for .NET via NuGet'
+---
+
+## Package Overview
+
+AutoGen for .NET provides multiple NuGet packages to suit different needs. You can install the all-in-one package or choose specific packages based on your requirements.
+
+<Note>
+All packages require **.NET 6.0** or later.
+</Note>
+
+## Quick Install
+
+For most users, install the all-in-one package:
+
+```bash
+dotnet add package AutoGen
+```
+
+This package includes:
+- `AutoGen.Core` - Core abstractions and types
+- `AutoGen.OpenAI` - OpenAI integration
+- `AutoGen.LMStudio` - LM Studio support
+- `AutoGen.SemanticKernel` - Semantic Kernel integration
+- `AutoGen.SourceGenerator` - Type-safe function generation
+
+## Package Versions
+
+<Tabs>
+  <Tab title="Stable (Recommended)">
+    Install the latest stable version from NuGet:
+    
+    [![NuGet version](https://badge.fury.io/nu/AutoGen.Core.svg)](https://badge.fury.io/nu/AutoGen.Core)
+    
+    ```bash
+    dotnet add package AutoGen
+    ```
+  </Tab>
+  
+  <Tab title="Nightly Build">
+    For the latest features and bug fixes, use nightly builds:
+    
+    **Add the nightly feed to your `NuGet.config`:**
+    
+    ```xml NuGet.config
+    <?xml version="1.0" encoding="utf-8"?>
+    <configuration>
+      <packageSources>
+        <clear />
+        <add key="AutoGen-Nightly" value="https://pkgs.dev.azure.com/AGPublish/AGPublic/_packaging/AutoGen-Nightly/nuget/v3/index.json" />
+        <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+      </packageSources>
+    </configuration>
+    ```
+    
+    **Or add via command line:**
+    
+    ```bash
+    dotnet nuget add source https://pkgs.dev.azure.com/AGPublish/AGPublic/_packaging/AutoGen-Nightly/nuget/v3/index.json --name AutoGen-Nightly
+    ```
+    
+    **For dotnet-interactive support:**
+    
+    ```bash
+    dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json --name dotnet-tools
+    ```
+    
+    **Install the nightly package:**
+    
+    ```bash
+    dotnet add package AutoGen --version VERSION
+    ```
+  </Tab>
+</Tabs>
+
+## Individual Packages
+
+Install only the packages you need for a minimal footprint:
+
+<AccordionGroup>
+  <Accordion title="AutoGen.Core" icon="cube">
+    Core abstractions for agents, messages, and group chat. Use this if you want to avoid dependencies on specific LLM providers.
+    
+    ```bash
+    dotnet add package AutoGen.Core
+    ```
+    
+    **Includes:**
+    - Agent abstractions (`IAgent`, `IStreamingAgent`)
+    - Message types (`TextMessage`, `ImageMessage`, etc.)
+    - Group chat and orchestration
+    - Middleware infrastructure
+  </Accordion>
+  
+  <Accordion title="AutoGen.OpenAI" icon="openai">
+    OpenAI model integration including GPT-4, GPT-3.5, and Azure OpenAI.
+    
+    ```bash
+    dotnet add package AutoGen.OpenAI
+    ```
+    
+    **Features:**
+    - `OpenAIChatAgent` for OpenAI models
+    - Streaming support
+    - Function calling
+    - Vision capabilities
+  </Accordion>
+  
+  <Accordion title="AutoGen.Anthropic" icon="message-bot">
+    Claude model integration from Anthropic.
+    
+    ```bash
+    dotnet add package AutoGen.Anthropic
+    ```
+    
+    **Features:**
+    - `AnthropicClientAgent` for Claude models
+    - Prompt caching support
+    - Tool/function calling
+  </Accordion>
+  
+  <Accordion title="AutoGen.AzureAIInference" icon="cloud">
+    Azure AI Inference integration for models deployed on Azure.
+    
+    ```bash
+    dotnet add package AutoGen.AzureAIInference
+    ```
+    
+    **Features:**
+    - `ChatCompletionsClientAgent` for Azure AI models
+    - Support for GitHub Models, Azure AI Studio
+    - Compatible with various model providers
+  </Accordion>
+  
+  <Accordion title="AutoGen.SemanticKernel" icon="brain">
+    Integration with Microsoft Semantic Kernel.
+    
+    ```bash
+    dotnet add package AutoGen.SemanticKernel
+    ```
+    
+    **Features:**
+    - `SemanticKernelAgent` wrapper
+    - Access to Semantic Kernel plugins
+    - Unified agent interface
+  </Accordion>
+  
+  <Accordion title="AutoGen.SourceGenerator" icon="code">
+    Source generator for type-safe function definitions.
+    
+    ```bash
+    dotnet add package AutoGen.SourceGenerator
+    ```
+    
+    **Features:**
+    - `[Function]` attribute for methods
+    - Automatic schema generation from XML docs
+    - Compile-time type safety
+    - Zero runtime reflection
+  </Accordion>
+  
+  <Accordion title="AutoGen.DotnetInteractive" icon="terminal">
+    Code execution support using dotnet-interactive.
+    
+    ```bash
+    dotnet add package AutoGen.DotnetInteractive
+    ```
+    
+    **Supports:**
+    - C# code execution
+    - F# code execution
+    - PowerShell scripts
+    - Python scripts (with Python kernel)
+  </Accordion>
+  
+  <Accordion title="AutoGen.Mistral" icon="wind">
+    Mistral AI model integration.
+    
+    ```bash
+    dotnet add package AutoGen.Mistral
+    ```
+  </Accordion>
+  
+  <Accordion title="AutoGen.Gemini" icon="sparkles">
+    Google Gemini model integration.
+    
+    ```bash
+    dotnet add package AutoGen.Gemini
+    ```
+  </Accordion>
+  
+  <Accordion title="AutoGen.Ollama" icon="server">
+    Local model support via Ollama.
+    
+    ```bash
+    dotnet add package AutoGen.Ollama
+    ```
+  </Accordion>
+  
+  <Accordion title="AutoGen.LMStudio" icon="desktop">
+    LM Studio local model support.
+    
+    ```bash
+    dotnet add package AutoGen.LMStudio
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Choosing the Right Package
+
+<Steps>
+  <Step title="All-in-One">
+    Install `AutoGen` if you want to get started quickly with common providers like OpenAI and don't mind the additional dependencies.
+    
+    ```bash
+    dotnet add package AutoGen
+    ```
+  </Step>
+  
+  <Step title="Core Only">
+    Install `AutoGen.Core` if you:
+    - Want minimal dependencies
+    - Plan to implement custom agents
+    - Only need the abstraction layer
+    
+    ```bash
+    dotnet add package AutoGen.Core
+    ```
+  </Step>
+  
+  <Step title="Provider-Specific">
+    Install specific provider packages based on your LLM:
+    
+    <CodeGroup>
+    ```bash OpenAI
+    dotnet add package AutoGen.Core
+    dotnet add package AutoGen.OpenAI
+    ```
+    
+    ```bash Anthropic
+    dotnet add package AutoGen.Core
+    dotnet add package AutoGen.Anthropic
+    ```
+    
+    ```bash Azure AI
+    dotnet add package AutoGen.Core
+    dotnet add package AutoGen.AzureAIInference
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Add Optional Features">
+    Enhance your application with optional packages:
+    
+    ```bash
+    # For type-safe functions
+    dotnet add package AutoGen.SourceGenerator
+    
+    # For code execution
+    dotnet add package AutoGen.DotnetInteractive
+    
+    # For Semantic Kernel integration
+    dotnet add package AutoGen.SemanticKernel
+    ```
+  </Step>
+</Steps>
+
+## Verification
+
+Verify your installation by checking the installed packages:
+
+```bash
+dotnet list package
+```
+
+You should see the AutoGen packages listed with their version numbers.
+
+## Example Project File
+
+Here's a complete `.csproj` example with common packages:
+
+```xml YourProject.csproj
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoGen.Core" Version="0.2.0" />
+    <PackageReference Include="AutoGen.OpenAI" Version="0.2.0" />
+    <PackageReference Include="AutoGen.SourceGenerator" Version="0.2.0" />
+    <PackageReference Include="AutoGen.DotnetInteractive" Version="0.2.0" />
+  </ItemGroup>
+</Project>
+```
+
+<Note>
+Replace version numbers with the latest available versions from NuGet.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/dotnet/quickstart">
+    Build your first AutoGen application
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/dotnet/agents">
+    Learn about agents and messaging
+  </Card>
+</CardGroup>

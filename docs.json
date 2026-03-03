@@ -1,122 +1,174 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "AutoGen",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#7C3AED",
+    "light": "#A78BFA",
+    "dark": "#5B21B6"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/microsoft/autogen"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/microsoft/autogen",
+      "twitter": "https://twitter.com/pyautogen",
+      "discord": "https://aka.ms/autogen-discord"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "installation",
+              "concepts"
             ]
           },
           {
-            "group": "Customization",
+            "group": "AgentChat",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "agentchat/overview",
+              "agentchat/agents",
+              "agentchat/teams",
+              "agentchat/tools",
+              "agentchat/models",
+              "agentchat/memory",
+              "agentchat/orchestration-patterns"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Core API",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "core/overview",
+              "core/agent-runtime",
+              "core/message-passing",
+              "core/distributed-runtime",
+              "core/event-driven-architecture"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Extensions",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "extensions/overview",
+              "extensions/model-clients",
+              "extensions/code-executors",
+              "extensions/tools",
+              "extensions/custom-extensions"
+            ]
+          },
+          {
+            "group": "Developer Tools",
+            "pages": [
+              "tools/autogen-studio",
+              "tools/autogen-bench",
+              "tools/magentic-one"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/custom-agents",
+              "guides/multi-agent-workflows",
+              "guides/tool-integration",
+              "guides/mcp-servers",
+              "guides/debugging-tracing",
+              "guides/migration-guide"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": ".NET",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Get Started",
             "pages": [
-              "api-reference/introduction"
+              "dotnet/introduction",
+              "dotnet/quickstart",
+              "dotnet/installation"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Core Concepts",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "dotnet/agents",
+              "dotnet/group-chat",
+              "dotnet/function-calling",
+              "dotnet/code-execution"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "dotnet/openai",
+              "dotnet/anthropic",
+              "dotnet/azure",
+              "dotnet/semantic-kernel"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Python API",
+            "pages": [
+              "api/python/core",
+              "api/python/agentchat",
+              "api/python/extensions"
+            ]
+          },
+          {
+            "group": ".NET API",
+            "pages": [
+              "api/dotnet/core",
+              "api/dotnet/agents",
+              "api/dotnet/extensions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Basic Examples",
+            "pages": [
+              "examples/hello-world",
+              "examples/two-agent-chat",
+              "examples/tool-calling"
+            ]
+          },
+          {
+            "group": "Advanced Examples",
+            "pages": [
+              "examples/web-browsing",
+              "examples/code-execution",
+              "examples/swarm-pattern",
+              "examples/graph-orchestration"
+            ]
+          },
+          {
+            "group": "Applications",
+            "pages": [
+              "examples/research-assistant",
+              "examples/customer-support",
+              "examples/data-analysis"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

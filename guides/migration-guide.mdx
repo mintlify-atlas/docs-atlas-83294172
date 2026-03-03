@@ -1,0 +1,649 @@
+---
+title: Migration from v0.2 to v0.4
+description: Comprehensive guide for migrating your AutoGen applications from v0.2 to v0.4
+---
+
+# Migration from v0.2 to v0.4
+
+AutoGen v0.4 is a ground-up rewrite with an asynchronous, event-driven architecture. This guide helps you migrate from v0.2 to take advantage of improved observability, flexibility, and scale.
+
+<Note>
+AutoGen v0.2 continues to receive bug fixes and security patches. However, we strongly recommend upgrading to v0.4 for new projects.
+</Note>
+
+## Why Upgrade to v0.4?
+
+AutoGen v0.4 offers significant improvements:
+
+- **Async/Await**: Native async support for better concurrency
+- **Event-Driven**: Observable, controllable agent execution
+- **Layered Architecture**: Core API + AgentChat API for flexibility
+- **Better Tool Integration**: Simplified tool use without separate executors
+- **State Management**: Built-in save/load for agents and teams
+- **Streaming**: Real-time message streaming
+- **Type Safety**: Improved type hints and Pydantic models
+
+## Installation
+
+```bash
+# Install v0.4
+pip install -U "autogen-agentchat" "autogen-ext[openai]"
+
+# v0.2 is available as:
+pip install "autogen-agentchat~=0.2"
+```
+
+<Warning>
+The `pyautogen` package is no longer maintained by Microsoft after v0.2.34. Use `autogen-agentchat` instead.
+</Warning>
+
+## Model Client Configuration
+
+### v0.2 Approach
+
+```python
+from autogen.oai import OpenAIWrapper
+
+config_list = [
+    {"model": "gpt-4o", "api_key": "sk-xxx"},
+    {"model": "gpt-4o-mini", "api_key": "sk-xxx"},
+]
+
+model_client = OpenAIWrapper(config_list=config_list)
+```
+
+### v0.4 Approach
+
+```python
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+# Direct instantiation
+model_client = OpenAIChatCompletionClient(
+    model="gpt-4o",
+    api_key="sk-xxx",  # or use environment variable
+    seed=42,
+    temperature=0
+)
+
+# Or using component config
+from autogen_core.models import ChatCompletionClient
+
+config = {
+    "provider": "OpenAIChatCompletionClient",
+    "config": {
+        "model": "gpt-4o",
+        "api_key": "sk-xxx"
+    }
+}
+
+model_client = ChatCompletionClient.load_component(config)
+```
+
+### Azure OpenAI
+
+```python
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+
+model_client = AzureOpenAIChatCompletionClient(
+    azure_deployment="gpt-4o",
+    azure_endpoint="https://your-endpoint.openai.azure.com/",
+    model="gpt-4o",
+    api_version="2024-09-01-preview",
+    api_key="your-key"
+)
+```
+
+## Assistant Agent
+
+### v0.2 Approach
+
+```python
+from autogen.agentchat import AssistantAgent
+
+llm_config = {
+    "config_list": [{"model": "gpt-4o", "api_key": "sk-xxx"}],
+    "seed": 42,
+    "temperature": 0,
+}
+
+assistant = AssistantAgent(
+    name="assistant",
+    system_message="You are a helpful assistant.",
+    llm_config=llm_config,
+)
+
+# Synchronous usage
+response = user_proxy.initiate_chat(assistant, message="Hello")
+```
+
+### v0.4 Approach
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.messages import TextMessage
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_core import CancellationToken
+
+async def main():
+    model_client = OpenAIChatCompletionClient(
+        model="gpt-4o",
+        seed=42,
+        temperature=0
+    )
+
+    assistant = AssistantAgent(
+        name="assistant",
+        system_message="You are a helpful assistant.",
+        model_client=model_client,  # Pass model_client, not llm_config
+    )
+
+    # Async usage
+    response = await assistant.on_messages(
+        [TextMessage(content="Hello", source="user")],
+        CancellationToken()
+    )
+    print(response.chat_message.content)
+    
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+## User Proxy Agent
+
+### v0.2 Approach
+
+```python
+from autogen.agentchat import UserProxyAgent
+
+user_proxy = UserProxyAgent(
+    name="user_proxy",
+    human_input_mode="NEVER",
+    max_consecutive_auto_reply=10,
+    code_execution_config=False,
+    llm_config=False,
+)
+```
+
+### v0.4 Approach
+
+```python
+from autogen_agentchat.agents import UserProxyAgent
+
+# Simpler - just takes user input
+user_proxy = UserProxyAgent("user_proxy")
+
+# With custom input function
+user_proxy = UserProxyAgent(
+    "user_proxy",
+    input_func=custom_input_function
+)
+```
+
+## Tool Usage
+
+### v0.2 Approach (Two-Agent Pattern)
+
+```python
+from autogen.agentchat import AssistantAgent, UserProxyAgent, register_function
+
+def get_weather(city: str) -> str:
+    return f"The weather in {city} is 72°F and sunny."
+
+tool_caller = AssistantAgent(
+    name="tool_caller",
+    llm_config=llm_config,
+)
+
+tool_executor = UserProxyAgent(
+    name="tool_executor",
+    human_input_mode="NEVER",
+    code_execution_config=False,
+)
+
+# Register function
+register_function(get_weather, caller=tool_caller, executor=tool_executor)
+
+# Initiate chat
+chat_result = tool_executor.initiate_chat(
+    tool_caller,
+    message="What's the weather in Seattle?"
+)
+```
+
+### v0.4 Approach (Single Agent)
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+def get_weather(city: str) -> str:
+    """Get the weather for a city."""
+    return f"The weather in {city} is 72°F and sunny."
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Single agent handles both calling and executing
+    assistant = AssistantAgent(
+        name="assistant",
+        model_client=model_client,
+        tools=[get_weather],  # Just pass the function
+        reflect_on_tool_use=True,  # Generate natural response
+    )
+    
+    result = await assistant.run(task="What's the weather in Seattle?")
+    print(result.messages[-1].content)
+    
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+## Code Execution
+
+### v0.2 Approach
+
+```python
+from autogen.coding import LocalCommandLineCodeExecutor
+from autogen.agentchat import AssistantAgent, UserProxyAgent
+
+assistant = AssistantAgent(
+    name="assistant",
+    llm_config=llm_config,
+)
+
+user_proxy = UserProxyAgent(
+    name="user_proxy",
+    code_execution_config={
+        "code_executor": LocalCommandLineCodeExecutor(work_dir="coding")
+    },
+)
+
+user_proxy.initiate_chat(assistant, message="Write code to calculate factorial")
+```
+
+### v0.4 Approach
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent, CodeExecutorAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    coder = AssistantAgent(
+        name="coder",
+        system_message="Write Python code to solve problems.",
+        model_client=model_client,
+    )
+
+    executor = CodeExecutorAgent(
+        name="executor",
+        code_executor=LocalCommandLineCodeExecutor(work_dir="coding"),
+    )
+
+    team = RoundRobinGroupChat(
+        [coder, executor],
+        termination_condition=MaxMessageTermination(10)
+    )
+
+    result = await team.run(task="Write code to calculate factorial of 10")
+    
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+## Group Chat
+
+### v0.2 Approach
+
+```python
+from autogen.agentchat import AssistantAgent, GroupChat, GroupChatManager
+
+writer = AssistantAgent(
+    name="writer",
+    system_message="You are a writer.",
+    llm_config=llm_config,
+)
+
+critic = AssistantAgent(
+    name="critic",
+    system_message="You are a critic. Say APPROVE when done.",
+    llm_config=llm_config,
+)
+
+groupchat = GroupChat(
+    agents=[writer, critic],
+    messages=[],
+    max_round=12
+)
+
+manager = GroupChatManager(
+    groupchat=groupchat,
+    llm_config=llm_config,
+    speaker_selection_method="round_robin"
+)
+
+result = writer.initiate_chat(
+    manager,
+    message="Write a story about robots"
+)
+```
+
+### v0.4 Approach
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import TextMentionTermination
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    writer = AssistantAgent(
+        name="writer",
+        system_message="You are a writer.",
+        model_client=model_client,
+    )
+
+    critic = AssistantAgent(
+        name="critic",
+        system_message="You are a critic. Say APPROVE when done.",
+        model_client=model_client,
+    )
+
+    team = RoundRobinGroupChat(
+        [writer, critic],
+        termination_condition=TextMentionTermination("APPROVE"),
+        max_turns=12
+    )
+
+    await Console(team.run_stream(task="Write a story about robots"))
+    
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+### LLM-Based Selection (SelectorGroupChat)
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat
+
+team = SelectorGroupChat(
+    [writer, critic, editor],
+    model_client=OpenAIChatCompletionClient(model="gpt-4o-mini"),
+    termination_condition=MaxMessageTermination(20)
+)
+```
+
+## State Management
+
+### v0.2 Approach
+
+Manual state management:
+
+```python
+# Export chat history
+chat_history = user_proxy.chat_messages
+
+# Import later
+user_proxy = UserProxyAgent(...)
+user_proxy.chat_messages = chat_history
+```
+
+### v0.4 Approach
+
+Built-in save/load:
+
+```python
+import json
+
+# Save agent state
+state = await agent.save_state()
+with open("agent_state.json", "w") as f:
+    json.dump(state, f)
+
+# Load agent state
+with open("agent_state.json", "r") as f:
+    state = json.load(f)
+await agent.load_state(state)
+
+# Works for teams too
+team_state = await team.save_state()
+await team.load_state(team_state)
+```
+
+## Caching
+
+### v0.2 Approach
+
+```python
+llm_config = {
+    "config_list": [{"model": "gpt-4o", "api_key": "sk-xxx"}],
+    "cache_seed": 42,  # Cache enabled by default
+}
+```
+
+### v0.4 Approach
+
+```python
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.models.cache import ChatCompletionCache
+from autogen_ext.cache_store.diskcache import DiskCacheStore
+from diskcache import Cache
+
+# Caching is opt-in
+base_client = OpenAIChatCompletionClient(model="gpt-4o")
+cache_store = DiskCacheStore(Cache(".cache"))
+cached_client = ChatCompletionCache(base_client, cache_store)
+
+agent = AssistantAgent(
+    "assistant",
+    model_client=cached_client
+)
+```
+
+## Custom Agents
+
+### v0.2 Approach (Register Reply)
+
+```python
+from autogen.agentchat import ConversableAgent
+
+conversable = ConversableAgent(
+    name="custom",
+    llm_config=llm_config,
+)
+
+def custom_reply(recipient, messages, sender, config):
+    return True, "Custom response"
+
+conversable.register_reply([ConversableAgent], custom_reply)
+```
+
+### v0.4 Approach (Inherit BaseChatAgent)
+
+```python
+from typing import Sequence
+from autogen_core import CancellationToken
+from autogen_agentchat.agents import BaseChatAgent
+from autogen_agentchat.messages import TextMessage, BaseChatMessage
+from autogen_agentchat.base import Response
+
+class CustomAgent(BaseChatAgent):
+    async def on_messages(
+        self,
+        messages: Sequence[BaseChatMessage],
+        cancellation_token: CancellationToken
+    ) -> Response:
+        return Response(
+            chat_message=TextMessage(content="Custom response", source=self.name)
+        )
+
+    async def on_reset(self, cancellation_token: CancellationToken) -> None:
+        pass
+
+    @property
+    def produced_message_types(self) -> Sequence[type[BaseChatMessage]]:
+        return (TextMessage,)
+```
+
+## Termination Conditions
+
+### v0.2 Approach
+
+```python
+assistant = AssistantAgent(
+    name="assistant",
+    llm_config=llm_config,
+    is_termination_msg=lambda x: x.get("content", "").endswith("TERMINATE"),
+)
+```
+
+### v0.4 Approach
+
+```python
+from autogen_agentchat.conditions import (
+    TextMentionTermination,
+    MaxMessageTermination,
+    StopMessageTermination
+)
+
+# Simple text termination
+termination = TextMentionTermination("TERMINATE")
+
+# Multiple conditions
+termination = (
+    TextMentionTermination("DONE") | 
+    MaxMessageTermination(20)
+)
+
+# Use in teams
+team = RoundRobinGroupChat(
+    [agent1, agent2],
+    termination_condition=termination
+)
+```
+
+## Streaming
+
+### v0.2
+
+No built-in streaming support.
+
+### v0.4
+
+```python
+from autogen_agentchat.ui import Console
+
+# Stream with Console UI
+await Console(agent.run_stream(task="Your task"))
+
+# Custom streaming
+async for message in agent.run_stream(task="Your task"):
+    if isinstance(message, TaskResult):
+        print(f"Completed: {message.stop_reason}")
+    else:
+        print(f"{message.source}: {message.content}")
+```
+
+## Key Differences Summary
+
+| Feature | v0.2 | v0.4 |
+|---------|------|------|
+| **Async** | Synchronous | Async/await |
+| **Tools** | Two agents (caller + executor) | Single agent |
+| **Config** | `llm_config` dict | `model_client` object |
+| **State** | Manual export/import | Built-in save/load |
+| **Streaming** | Not supported | Native streaming |
+| **Termination** | Per-agent callbacks | Team-level conditions |
+| **Group Chat** | GroupChat + Manager | Team classes |
+| **Caching** | On by default | Opt-in wrapper |
+
+## Breaking Changes
+
+<Warning>
+These features from v0.2 are not yet available in v0.4:
+
+- Model client cost tracking
+- Teachable agents
+- Some RAG patterns (use Memory API instead)
+</Warning>
+
+## Migration Checklist
+
+<Steps>
+
+### Update Imports
+
+```python
+# v0.2
+from autogen.agentchat import AssistantAgent
+from autogen.oai import OpenAIWrapper
+
+# v0.4
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+```
+
+### Convert to Async
+
+Wrap your code in async functions:
+
+```python
+import asyncio
+
+async def main():
+    # Your agent code here
+    pass
+
+asyncio.run(main())
+```
+
+### Update Model Configuration
+
+Replace `llm_config` with `model_client`.
+
+### Simplify Tool Usage
+
+Remove tool executor agents - use single agents with tools.
+
+### Update Group Chats
+
+Replace GroupChat + GroupChatManager with team classes.
+
+### Add Proper Cleanup
+
+```python
+try:
+    # Your code
+    pass
+finally:
+    await model_client.close()
+```
+
+</Steps>
+
+## Getting Help
+
+- [GitHub Discussions](https://github.com/microsoft/autogen/discussions)
+- [Discord Community](https://aka.ms/autogen-discord)
+- [Documentation](https://microsoft.github.io/autogen/)
+
+## Related Resources
+
+- [Custom Agents](/guides/custom-agents) - Build custom agents in v0.4
+- [Multi-Agent Workflows](/guides/multi-agent-workflows) - Team patterns
+- [Tool Integration](/guides/tool-integration) - Tool usage in v0.4

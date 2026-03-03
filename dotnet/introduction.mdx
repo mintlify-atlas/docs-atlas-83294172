@@ -1,0 +1,144 @@
+---
+title: '.NET SDK Overview'
+description: 'Build multi-agent AI applications with AutoGen for .NET'
+---
+
+## What is AutoGen for .NET?
+
+AutoGen for .NET is a powerful framework for building multi-agent conversational AI applications using C#. It provides a comprehensive set of tools and abstractions for creating intelligent agents that can communicate, collaborate, and solve complex problems together.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Conversable Agents" icon="robot">
+    Create AI agents with customizable behaviors, including AssistantAgent and UserProxyAgent for human-in-the-loop workflows.
+  </Card>
+  
+  <Card title="Group Chat" icon="users">
+    Orchestrate multiple agents in dynamic conversations with flexible workflows and role-based coordination.
+  </Card>
+  
+  <Card title="Type-Safe Functions" icon="code">
+    Define functions with source generators for compile-time type safety and automatic schema generation.
+  </Card>
+  
+  <Card title="Code Execution" icon="terminal">
+    Execute C#, F#, Python, and PowerShell code snippets using dotnet-interactive integration.
+  </Card>
+</CardGroup>
+
+## Architecture
+
+AutoGen for .NET consists of two package families:
+
+### AutoGen.* Packages (Stable)
+
+The mature, stable packages derived from AutoGen 0.2:
+
+- **AutoGen.Core**: Core abstractions for agents, messages, and group chat
+- **AutoGen.OpenAI**: OpenAI model integration
+- **AutoGen.Anthropic**: Claude model integration
+- **AutoGen.AzureAIInference**: Azure AI Inference integration
+- **AutoGen.SemanticKernel**: Semantic Kernel integration
+- **AutoGen.SourceGenerator**: Type-safe function generation
+- **AutoGen.DotnetInteractive**: Code execution capabilities
+
+### Microsoft.AutoGen.* Packages (Preview)
+
+New event-driven packages with modern architecture (APIs subject to change):
+
+- **Microsoft.AutoGen.Core**: Event-driven core runtime
+- **Microsoft.AutoGen.Agents**: Agent hosting infrastructure
+- **Microsoft.AutoGen.AgentChat**: Conversational agents
+
+<Note>
+This documentation focuses on the stable **AutoGen.*** packages, which are recommended for production use.
+</Note>
+
+## Core Concepts
+
+### Agents
+
+Agents are the building blocks of AutoGen applications. Each agent has:
+
+- **Name**: Unique identifier for the agent
+- **System Message**: Instructions that define the agent's role and behavior
+- **LLM Configuration**: Model settings and API credentials
+- **Human Input Mode**: Control when human intervention is required
+
+### Messages
+
+AutoGen supports multiple message types:
+
+- `TextMessage`: Plain text content
+- `ImageMessage`: Visual content
+- `ToolCallMessage`: Function invocation requests
+- `ToolCallResultMessage`: Function execution results
+- `ToolCallAggregateMessage`: Combined tool call and result
+
+### Middleware
+
+Middleware components intercept and process messages, enabling:
+
+- Function calling
+- Message transformation
+- Logging and debugging
+- Custom workflows
+
+## Quick Example
+
+Here's a minimal example to get you started:
+
+```csharp
+using AutoGen;
+using AutoGen.OpenAI;
+
+var openAIKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var gpt35Config = new OpenAIConfig(openAIKey, "gpt-3.5-turbo");
+
+var assistant = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are a helpful AI assistant.",
+    llmConfig: new ConversableAgentConfig
+    {
+        Temperature = 0,
+        ConfigList = [gpt35Config],
+    })
+    .RegisterPrintMessage();
+
+var user = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.ALWAYS)
+    .RegisterPrintMessage();
+
+await user.InitiateChatAsync(
+    receiver: assistant,
+    message: "Hello, can you help me?",
+    maxRound: 10);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/dotnet/quickstart">
+    Build your first AutoGen application in minutes
+  </Card>
+  
+  <Card title="Installation" icon="download" href="/dotnet/installation">
+    Install AutoGen packages via NuGet
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/dotnet/agents">
+    Learn about agents and messaging
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples">
+    Explore sample applications
+  </Card>
+</CardGroup>
+
+## Resources
+
+- [GitHub Repository](https://github.com/microsoft/autogen/tree/main/dotnet)
+- [NuGet Packages](https://www.nuget.org/packages?q=AutoGen)
+- [Sample Projects](https://github.com/microsoft/autogen/tree/main/dotnet/samples)

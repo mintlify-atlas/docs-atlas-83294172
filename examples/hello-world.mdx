@@ -1,0 +1,107 @@
+---
+title: Hello World
+description: Create your first AutoGen agent with a simple hello world example
+---
+
+This is the simplest possible AutoGen example. It creates a single assistant agent that responds to a task.
+
+## What You'll Learn
+
+- How to create an OpenAI model client
+- How to create an AssistantAgent
+- How to run a simple task
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]"
+    ```
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## Code Example
+
+Create a file called `hello_world.py` with the following code:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+async def main() -> None:
+    # Create the model client
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Create the assistant agent
+    agent = AssistantAgent("assistant", model_client=model_client)
+    
+    # Run a simple task
+    result = await agent.run(task="Say 'Hello World!'")
+    print(result)
+    
+    # Clean up
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python hello_world.py
+```
+
+## Expected Output
+
+You should see output similar to:
+
+```
+TaskResult(messages=[TextMessage(source='assistant', content='Hello World!', ...)])
+```
+
+## How It Works
+
+1. **Model Client**: Creates an `OpenAIChatCompletionClient` configured to use GPT-4o
+2. **Assistant Agent**: Creates an `AssistantAgent` that uses the model client to generate responses
+3. **Run Task**: Executes the task and returns a `TaskResult` containing the agent's response
+4. **Cleanup**: Closes the model client to release resources
+
+## Key Concepts
+
+<CardGroup cols={2}>
+  <Card title="AssistantAgent" icon="robot">
+    A general-purpose agent that uses an LLM to respond to tasks and messages.
+  </Card>
+  
+  <Card title="Model Client" icon="server">
+    Handles communication with the LLM provider (OpenAI, Azure, etc.).
+  </Card>
+  
+  <Card title="Task" icon="list-check">
+    A string prompt that tells the agent what to do.
+  </Card>
+  
+  <Card title="TaskResult" icon="check">
+    Contains the messages generated during task execution.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Two Agent Chat" icon="comments" href="/examples/two-agent-chat">
+    Learn how to create conversations between multiple agents
+  </Card>
+  
+  <Card title="Tool Calling" icon="wrench" href="/examples/tool-calling">
+    Add tools to give your agents new capabilities
+  </Card>
+</CardGroup>

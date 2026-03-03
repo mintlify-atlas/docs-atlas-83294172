@@ -1,0 +1,429 @@
+---
+title: Research Assistant
+description: Build an AI research assistant that gathers, analyzes, and synthesizes information
+---
+
+This example demonstrates how to build a complete research assistant application that can browse the web, analyze information, and generate comprehensive reports.
+
+## What You'll Learn
+
+- Building multi-agent research workflows
+- Integrating web browsing capabilities
+- Information synthesis and reporting
+- Managing complex agent interactions
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen with all extensions">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]" "autogen-ext[tools]"
+    ```
+  </Step>
+  
+  <Step title="Install Playwright MCP Server">
+    ```bash
+    npm install -g @playwright/mcp@latest
+    npx playwright install chromium
+    ```
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## Architecture
+
+The research assistant uses multiple specialized agents:
+
+- **Planner**: Breaks down research questions into subtasks
+- **Researcher**: Gathers information from the web
+- **Analyzer**: Analyzes and validates information
+- **Writer**: Synthesizes findings into a report
+
+## Code Example
+
+```python
+import asyncio
+from typing import List
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+
+class ResearchAssistant:
+    """Multi-agent research assistant."""
+    
+    def __init__(self, model_client: OpenAIChatCompletionClient):
+        self.model_client = model_client
+        self.planner = None
+        self.researcher = None
+        self.analyzer = None
+        self.writer = None
+    
+    async def setup_agents(self, mcp_workbench):
+        """Initialize all research agents."""
+        
+        # Planner: Creates research strategy
+        self.planner = AssistantAgent(
+            "research_planner",
+            model_client=self.model_client,
+            system_message="""You are a research planner.
+            Break down research questions into specific, actionable subtasks.
+            Identify key information needed and potential sources.
+            Create a clear research strategy.""",
+            model_client_stream=True,
+        )
+        
+        # Researcher: Gathers information
+        self.researcher = AssistantAgent(
+            "web_researcher",
+            model_client=self.model_client,
+            workbench=mcp_workbench,
+            system_message="""You are a web researcher.
+            Use web browsing tools to gather accurate, relevant information.
+            Cite your sources and verify information from multiple sources.
+            Focus on credible, authoritative sources.""",
+            model_client_stream=True,
+            max_tool_iterations=15,
+        )
+        
+        # Analyzer: Validates and analyzes information
+        self.analyzer = AssistantAgent(
+            "information_analyst",
+            model_client=self.model_client,
+            system_message="""You are an information analyst.
+            Analyze gathered information for:
+            - Accuracy and credibility
+            - Relevance to the research question
+            - Gaps or contradictions
+            - Key insights and patterns
+            Provide critical analysis, not just summary.""",
+            model_client_stream=True,
+        )
+        
+        # Writer: Synthesizes findings
+        self.writer = AssistantAgent(
+            "report_writer",
+            model_client=self.model_client,
+            system_message="""You are a research report writer.
+            Synthesize findings into a clear, comprehensive report.
+            Structure: Executive Summary, Findings, Analysis, Conclusions.
+            Use clear headings, bullet points, and cite sources.
+            Write professionally and objectively.""",
+            model_client_stream=True,
+        )
+    
+    async def research(self, question: str) -> str:
+        """Conduct research on a question."""
+        team = RoundRobinGroupChat(
+            participants=[
+                self.planner,
+                self.researcher,
+                self.analyzer,
+                self.writer,
+            ],
+            max_turns=20,
+        )
+        
+        result = await Console(
+            team.run_stream(task=f"Research question: {question}")
+        )
+        
+        return result.messages[-1].content
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Setup MCP server for web browsing
+    server_params = StdioServerParams(
+        command="npx",
+        args=["@playwright/mcp@latest", "--headless"],
+    )
+    
+    async with McpWorkbench(server_params) as mcp:
+        # Create research assistant
+        assistant = ResearchAssistant(model_client)
+        await assistant.setup_agents(mcp)
+        
+        # Conduct research
+        question = """What are the latest developments in quantum computing 
+        and their potential impact on cryptography?"""
+        
+        print(f"Researching: {question}\n")
+        report = await assistant.research(question)
+        
+        print("\n" + "="*80)
+        print("FINAL REPORT")
+        print("="*80)
+        print(report)
+    
+    await model_client.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python research_assistant.py
+```
+
+## Expected Output
+
+```
+---------- research_planner ----------
+Research Strategy:
+1. Define current state of quantum computing
+2. Identify recent breakthroughs (2023-2024)
+3. Understand quantum threat to cryptography
+4. Research post-quantum cryptography solutions
+5. Analyze timeline and implications
+
+---------- web_researcher ----------
+[Browsing quantum computing sources...]
+Key findings:
+- IBM's 433-qubit Osprey processor (2023)
+- Google's quantum error correction breakthrough
+- NIST post-quantum cryptography standards
+- Timeline: 10-15 years to cryptographically relevant quantum computers
+
+Sources:
+- nature.com/articles/quantum-computing-2024
+- nist.gov/post-quantum-cryptography
+- ibm.com/quantum-computing
+
+---------- information_analyst ----------
+Analysis:
+- Quantum computing advancing rapidly but still early stage
+- Real threat to current RSA/ECC cryptography within 10-15 years
+- Post-quantum algorithms being standardized now
+- Organizations should begin transition planning
+- Some areas of uncertainty remain on timeline
+
+---------- report_writer ----------
+EXECUTIVE SUMMARY
+Quantum computing poses a significant long-term threat to current 
+cryptographic systems. While cryptographically relevant quantum computers 
+are estimated to be 10-15 years away, organizations should begin 
+transitioning to post-quantum cryptography now...
+
+[Full detailed report follows]
+```
+
+## Advanced Features
+
+### Save Research to File
+
+```python
+import aiofiles
+from datetime import datetime
+
+async def save_research_report(report: str, question: str):
+    """Save research report to markdown file."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"research_report_{timestamp}.md"
+    
+    content = f"""# Research Report
+
+**Question:** {question}
+
+**Date:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+---
+
+{report}
+"""
+    
+    async with aiofiles.open(filename, 'w') as f:
+        await f.write(content)
+    
+    print(f"Report saved to: {filename}")
+
+# Usage
+report = await assistant.research(question)
+await save_research_report(report, question)
+```
+
+### Multi-Topic Research
+
+```python
+async def research_multiple_topics(assistant, topics: List[str]):
+    """Research multiple related topics."""
+    results = {}
+    
+    for topic in topics:
+        print(f"\nResearching: {topic}")
+        results[topic] = await assistant.research(topic)
+    
+    # Synthesize all findings
+    synthesis_task = f"""Synthesize these related research findings:
+    
+    {chr(10).join(f'{topic}:{chr(10)}{report}' for topic, report in results.items())}
+    
+    Create an integrated analysis showing connections and overall conclusions.
+    """
+    
+    final_report = await assistant.writer.run(task=synthesis_task)
+    return final_report
+
+# Usage
+topics = [
+    "Quantum computing hardware advances",
+    "Post-quantum cryptography standards",
+    "Industry adoption timeline",
+]
+
+comprehensive_report = await research_multiple_topics(assistant, topics)
+```
+
+## Integration with GraphRAG
+
+For document-based research, integrate with GraphRAG:
+
+```python
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.tools.graphrag import GlobalSearchTool, LocalSearchTool
+
+# Setup GraphRAG (assuming you've indexed documents)
+global_search = GlobalSearchTool(config_path="./graphrag_config")
+local_search = LocalSearchTool(config_path="./graphrag_config")
+
+# Add to researcher agent
+researcher = AssistantAgent(
+    "document_researcher",
+    model_client=model_client,
+    tools=[global_search, local_search],
+    system_message="""You are a document researcher.
+    Use GraphRAG tools to search indexed documents.
+    - Use global search for broad questions
+    - Use local search for specific entity information
+    """,
+)
+```
+
+See the [GraphRAG integration guide](/examples/graphrag-integration) for setup details.
+
+## Key Concepts
+
+<CardGroup cols={2}>
+  <Card title="Multi-Agent Workflow" icon="users">
+    Specialized agents collaborate on complex research tasks.
+  </Card>
+  
+  <Card title="Web Browsing" icon="globe">
+    MCP servers provide real-time web access for current information.
+  </Card>
+  
+  <Card title="Information Synthesis" icon="file-contract">
+    Multiple perspectives combined into comprehensive reports.
+  </Card>
+  
+  <Card title="Source Citation" icon="quote-right">
+    Track and cite sources for credibility and verification.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+1. **Clear Instructions**: Give each agent specific role and responsibilities
+2. **Source Verification**: Require multiple sources for important claims
+3. **Error Handling**: Handle web browsing failures gracefully
+4. **Rate Limiting**: Respect website rate limits and robots.txt
+5. **Caching**: Cache results to avoid redundant web requests
+6. **Structured Output**: Use consistent report formats
+
+## Production Considerations
+
+### Add Logging
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class ResearchAssistant:
+    async def research(self, question: str) -> str:
+        logger.info(f"Starting research: {question}")
+        # ... research process
+        logger.info("Research complete")
+        return result
+```
+
+### Add Error Recovery
+
+```python
+async def research_with_retry(self, question: str, max_retries: int = 3):
+    """Research with automatic retry on failure."""
+    for attempt in range(max_retries):
+        try:
+            return await self.research(question)
+        except Exception as e:
+            logger.error(f"Attempt {attempt + 1} failed: {e}")
+            if attempt == max_retries - 1:
+                raise
+            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+```
+
+### Add Progress Tracking
+
+```python
+from autogen_agentchat.messages import AgentEvent
+
+class ResearchProgress:
+    def __init__(self):
+        self.current_phase = "initializing"
+        self.progress = 0.0
+    
+    async def track_progress(self, event: AgentEvent):
+        if event.agent_name == "research_planner":
+            self.current_phase = "planning"
+            self.progress = 0.25
+        elif event.agent_name == "web_researcher":
+            self.current_phase = "researching"
+            self.progress = 0.5
+        # ... etc
+        
+        print(f"Progress: {self.progress*100:.0f}% - {self.current_phase}")
+```
+
+## Troubleshooting
+
+### Slow Performance
+
+- Enable parallel research for independent subtopics
+- Cache frequently accessed information
+- Use faster models for planning/analysis phases
+
+### Inaccurate Information
+
+- Require multiple source verification
+- Add fact-checking agent
+- Prefer authoritative domains
+
+### Too Many Web Requests
+
+- Add request caching
+- Batch similar queries
+- Implement rate limiting
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customer Support" icon="headset" href="/examples/customer-support">
+    Build a customer support bot
+  </Card>
+  
+  <Card title="Data Analysis" icon="chart-line" href="/examples/data-analysis">
+    Create automated data analysis workflows
+  </Card>
+</CardGroup>

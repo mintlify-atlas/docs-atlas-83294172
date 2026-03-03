@@ -1,0 +1,517 @@
+---
+title: Designing Multi-Agent Workflows
+description: Build sophisticated multi-agent systems using AutoGen's team patterns and orchestration strategies
+---
+
+# Designing Multi-Agent Workflows
+
+AutoGen provides powerful patterns for orchestrating multiple agents to solve complex tasks. Learn how to design effective multi-agent workflows using teams, handoffs, and custom orchestration.
+
+## Team Patterns
+
+AutoGen offers several pre-built team patterns for common multi-agent scenarios.
+
+### RoundRobinGroupChat
+
+Agents take turns in a fixed order - ideal for sequential processing:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import TextMentionTermination, MaxMessageTermination
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    writer = AssistantAgent(
+        name="writer",
+        description="A creative writer",
+        system_message="You are a writer. Write creative content.",
+        model_client=model_client,
+    )
+
+    critic = AssistantAgent(
+        name="critic",
+        description="A constructive critic",
+        system_message="Review writing and provide feedback. Say APPROVE when satisfied.",
+        model_client=model_client,
+    )
+
+    # Terminate when "APPROVE" is mentioned or after 12 turns
+    termination = TextMentionTermination("APPROVE") | MaxMessageTermination(12)
+
+    # Create round-robin team
+    team = RoundRobinGroupChat(
+        [writer, critic], 
+        termination_condition=termination,
+        max_turns=12
+    )
+
+    # Run and stream results
+    stream = team.run_stream(
+        task="Write a short story about a robot discovering emotions"
+    )
+    await Console(stream)
+    
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+### SelectorGroupChat
+
+Use an LLM to intelligently select the next speaker:
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    researcher = AssistantAgent(
+        name="researcher",
+        description="Searches for information and gathers data",
+        system_message="You research topics thoroughly.",
+        model_client=model_client,
+    )
+
+    analyst = AssistantAgent(
+        name="analyst",
+        description="Analyzes data and draws conclusions",
+        system_message="You analyze information and provide insights.",
+        model_client=model_client,
+    )
+
+    writer = AssistantAgent(
+        name="writer",
+        description="Writes clear summaries and reports",
+        system_message="You write clear, concise reports.",
+        model_client=model_client,
+    )
+
+    # LLM selects most appropriate agent for each turn
+    team = SelectorGroupChat(
+        participants=[researcher, analyst, writer],
+        model_client=OpenAIChatCompletionClient(model="gpt-4o-mini"),  # Selector LLM
+        termination_condition=MaxMessageTermination(15),
+        allow_repeated_speaker=True  # Same agent can speak multiple times
+    )
+
+    result = await team.run(
+        task="Research and analyze the impact of AI on healthcare, then write a summary"
+    )
+    
+    await model_client.close()
+```
+
+### Swarm Pattern
+
+Agents dynamically hand off to each other based on context:
+
+```python
+from autogen_agentchat.teams import Swarm
+from autogen_agentchat.base import Handoff
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Define handoffs between agents
+    sales_handoffs = [
+        Handoff(target="technical_support", description="Transfer to technical support")
+    ]
+    
+    tech_handoffs = [
+        Handoff(target="sales", description="Transfer back to sales")
+    ]
+
+    sales_agent = AssistantAgent(
+        name="sales",
+        description="Handles sales inquiries",
+        system_message="You handle sales questions. Transfer technical questions to support.",
+        model_client=model_client,
+        handoffs=sales_handoffs
+    )
+
+    tech_agent = AssistantAgent(
+        name="technical_support",
+        description="Provides technical support",
+        system_message="You provide technical support. Transfer sales questions to sales.",
+        model_client=model_client,
+        handoffs=tech_handoffs
+    )
+
+    team = Swarm(
+        participants=[sales_agent, tech_agent],
+        termination_condition=MaxMessageTermination(10)
+    )
+
+    await Console(team.run_stream(task="I want to buy your product but need to know technical specs"))
+    
+    await model_client.close()
+```
+
+## Custom Selector Functions
+
+Implement custom logic for speaker selection:
+
+```python
+from typing import Sequence
+from autogen_agentchat.messages import BaseAgentEvent, BaseChatMessage
+
+
+def custom_selector(
+    messages: Sequence[BaseAgentEvent | BaseChatMessage]
+) -> str | None:
+    """Custom function to select next speaker.
+    
+    Returns:
+        Agent name (str) to select that agent
+        None to use default LLM-based selection
+    """
+    if not messages:
+        return "planner"  # Start with planner
+    
+    last_message = messages[-1]
+    
+    # Always return to planner after other agents speak
+    if last_message.source != "planner":
+        return "planner"
+    
+    # Let LLM decide otherwise
+    return None
+
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    planner = AssistantAgent(
+        "planner",
+        model_client=model_client,
+        system_message="Plan tasks and delegate to specialists."
+    )
+    
+    researcher = AssistantAgent(
+        "researcher",
+        model_client=model_client,
+        system_message="Research information."
+    )
+    
+    analyst = AssistantAgent(
+        "analyst",
+        model_client=model_client,
+        system_message="Analyze data."
+    )
+    
+    team = SelectorGroupChat(
+        [planner, researcher, analyst],
+        model_client=OpenAIChatCompletionClient(model="gpt-4o-mini"),
+        termination_condition=MaxMessageTermination(20),
+        selector_func=custom_selector  # Use custom selector
+    )
+    
+    await Console(team.run_stream(task="Analyze market trends for AI startups"))
+```
+
+## Code Execution Workflow
+
+Combine AssistantAgent with CodeExecutorAgent:
+
+```python
+from autogen_agentchat.agents import AssistantAgent, CodeExecutorAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Agent that writes code
+    coder = AssistantAgent(
+        name="coder",
+        system_message="Write Python code to solve tasks. Reply TERMINATE when done.",
+        model_client=model_client,
+    )
+
+    # Agent that executes code
+    executor = CodeExecutorAgent(
+        name="executor",
+        code_executor=LocalCommandLineCodeExecutor(work_dir="coding"),
+    )
+
+    termination = TextMentionTermination("TERMINATE") | MaxMessageTermination(10)
+
+    team = RoundRobinGroupChat(
+        [coder, executor],
+        termination_condition=termination
+    )
+
+    result = await team.run(task="Calculate the first 10 Fibonacci numbers")
+    print(result.messages[-1].content)
+    
+    await model_client.close()
+```
+
+## Tool-Equipped Multi-Agent Teams
+
+Agents in teams can have different tools:
+
+```python
+from autogen_agentchat.tools import FunctionTool
+
+def search_web(query: str) -> str:
+    """Search the web for information."""
+    return f"Search results for: {query}"
+
+def analyze_data(data: str) -> str:
+    """Analyze numerical data."""
+    return f"Analysis of: {data}"
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Agent with web search tool
+    researcher = AssistantAgent(
+        name="researcher",
+        description="Searches web for information",
+        model_client=model_client,
+        tools=[search_web],
+        reflect_on_tool_use=True
+    )
+
+    # Agent with analysis tool
+    analyst = AssistantAgent(
+        name="analyst",
+        description="Analyzes data",
+        model_client=model_client,
+        tools=[analyze_data],
+        reflect_on_tool_use=True
+    )
+
+    team = SelectorGroupChat(
+        [researcher, analyst],
+        model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+        termination_condition=MaxMessageTermination(10)
+    )
+
+    await Console(team.run_stream(
+        task="Research AI trends and analyze the data"
+    ))
+```
+
+## State Management in Teams
+
+Save and resume team state:
+
+```python
+import json
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Create team
+    team = RoundRobinGroupChat(
+        [writer, critic],
+        termination_condition=MaxMessageTermination(10)
+    )
+    
+    # Run first task
+    await Console(team.run_stream(task="Write a story about space"))
+    
+    # Save state
+    state = await team.save_state()
+    with open("team_state.json", "w") as f:
+        json.dump(state, f)
+    
+    # Create new team instance
+    new_team = RoundRobinGroupChat(
+        [writer, critic],
+        termination_condition=MaxMessageTermination(10)
+    )
+    
+    # Load previous state
+    with open("team_state.json", "r") as f:
+        state = json.load(f)
+    await new_team.load_state(state)
+    
+    # Continue from where we left off
+    await Console(new_team.run_stream(task="Now add more details"))
+```
+
+## Nested Teams
+
+Create hierarchical team structures:
+
+```python
+from autogen_agentchat.tools import AgentTool
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Create specialized sub-team
+    researcher = AssistantAgent("researcher", model_client=model_client)
+    analyst = AssistantAgent("analyst", model_client=model_client)
+    
+    research_team = RoundRobinGroupChat(
+        [researcher, analyst],
+        termination_condition=MaxMessageTermination(5)
+    )
+
+    # Wrap team as a tool
+    research_tool = AgentTool(research_team, return_value_as_last_message=True)
+
+    # Main orchestrator agent
+    orchestrator = AssistantAgent(
+        name="orchestrator",
+        system_message="Coordinate research using the research team tool.",
+        model_client=model_client,
+        tools=[research_tool]
+    )
+
+    result = await orchestrator.run(
+        task="Research market opportunities in renewable energy"
+    )
+```
+
+## Termination Strategies
+
+Control when workflows complete:
+
+```python
+from autogen_agentchat.conditions import (
+    MaxMessageTermination,
+    TextMentionTermination,
+    StopMessageTermination,
+    ExternalTermination
+)
+
+# Combine multiple conditions
+termination = (
+    TextMentionTermination("APPROVE") |  # OR
+    MaxMessageTermination(20)
+)
+
+# All conditions must be met
+termination = (
+    TextMentionTermination("DONE") &  # AND
+    MaxMessageTermination(10)
+)
+
+# External control
+external_term = ExternalTermination()
+
+team = RoundRobinGroupChat(
+    participants=[agent1, agent2],
+    termination_condition=external_term
+)
+
+# Trigger termination externally
+await external_term.set()
+```
+
+## Best Practices
+
+<Steps>
+
+### Design for Clarity
+
+Give agents clear, distinct roles and responsibilities:
+
+```python
+researcher = AssistantAgent(
+    name="researcher",
+    description="Searches for factual information and data",  # Clear description
+    system_message="You are a researcher. Find facts, not opinions."
+)
+```
+
+### Use Appropriate Patterns
+
+- **RoundRobin**: Sequential, predictable workflows
+- **Selector**: Dynamic, context-dependent routing
+- **Swarm**: Agent-initiated handoffs
+
+### Set Reasonable Limits
+
+Always set termination conditions to prevent infinite loops:
+
+```python
+termination = MaxMessageTermination(25)  # Safety limit
+```
+
+### Monitor Token Usage
+
+Long conversations consume many tokens. Consider:
+- Context compression
+- Summarization agents
+- Memory management
+
+### Handle Failures Gracefully
+
+Implement error handling:
+
+```python
+try:
+    result = await team.run(task=user_task)
+except Exception as e:
+    print(f"Team execution failed: {e}")
+    # Implement fallback behavior
+```
+
+</Steps>
+
+<Warning>
+Be careful with `allow_repeated_speaker=True` in SelectorGroupChat - it can lead to infinite loops if not combined with proper termination conditions.
+</Warning>
+
+## Streaming and UI
+
+Stream team execution for real-time feedback:
+
+```python
+from autogen_agentchat.ui import Console
+
+# Console UI (default)
+await Console(team.run_stream(task="Your task"))
+
+# Custom streaming handler
+async for message in team.run_stream(task="Your task"):
+    if isinstance(message, TaskResult):
+        print(f"\nCompleted: {message.stop_reason}")
+    else:
+        print(f"{message.source}: {message.content}")
+```
+
+## Advanced: Graph-Based Workflows
+
+Define complex workflows as directed graphs:
+
+```python
+from autogen_agentchat.teams import DiGraphBuilder, GraphFlow
+
+async def main():
+    # Define workflow graph
+    builder = DiGraphBuilder()
+    builder.add_node("start", researcher)
+    builder.add_node("analyze", analyst)
+    builder.add_node("report", writer)
+    
+    builder.add_edge("start", "analyze")
+    builder.add_edge("analyze", "report")
+    
+    graph = builder.build()
+    
+    # Execute graph workflow
+    workflow = GraphFlow(graph, termination_condition=MaxMessageTermination(10))
+    result = await workflow.run(task="Research AI trends")
+```
+
+## Related Resources
+
+- [Custom Agents](/guides/custom-agents) - Build specialized agents
+- [Tool Integration](/guides/tool-integration) - Add tools to agents
+- [Debugging and Tracing](/guides/debugging-tracing) - Debug workflows

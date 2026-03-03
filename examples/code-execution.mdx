@@ -1,0 +1,306 @@
+---
+title: Code Execution Agent
+description: Create agents that can write and execute Python code
+---
+
+This example shows how to create agents that can write, execute, and analyze Python code safely.
+
+## What You'll Learn
+
+- How to enable code execution in agents
+- How to use Docker for safe code execution
+- How to create code-writing assistants
+- Best practices for code execution security
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen with Docker support">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai,docker]"
+    ```
+  </Step>
+  
+  <Step title="Install Docker">
+    Install Docker Desktop or Docker Engine from [docker.com](https://www.docker.com/)
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## Basic Code Execution
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent, CodeExecutorAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.ui import Console
+from autogen_ext.code_executors import DockerCommandLineCodeExecutor
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Create code executor with Docker
+    async with DockerCommandLineCodeExecutor() as executor:
+        # Assistant that writes code
+        assistant = AssistantAgent(
+            "code_writer",
+            model_client=model_client,
+            system_message="""You are a helpful AI assistant that can write Python code.
+            When asked to perform calculations or data analysis, write Python code to solve the problem.
+            Always explain what your code does.""",
+        )
+
+        # Agent that executes code
+        code_executor = CodeExecutorAgent(
+            "code_executor",
+            code_executor=executor,
+        )
+
+        # Create team with both agents
+        team = RoundRobinGroupChat(
+            [assistant, code_executor],
+            max_turns=10,
+        )
+
+        # Run analysis task
+        await Console(
+            team.run_stream(
+                task="""Calculate the first 10 Fibonacci numbers and plot them.
+                Save the plot as 'fibonacci.png'."""
+            )
+        )
+
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python code_execution.py
+```
+
+## Expected Output
+
+```
+---------- code_writer ----------
+I'll write Python code to calculate the Fibonacci numbers and create a plot.
+
+```python
+import matplotlib.pyplot as plt
+
+# Calculate first 10 Fibonacci numbers
+fib = [0, 1]
+for i in range(8):
+    fib.append(fib[-1] + fib[-2])
+
+# Create plot
+plt.figure(figsize=(10, 6))
+plt.plot(fib, marker='o')
+plt.title('First 10 Fibonacci Numbers')
+plt.xlabel('Index')
+plt.ylabel('Value')
+plt.grid(True)
+plt.savefig('fibonacci.png')
+```
+
+---------- code_executor ----------
+Code executed successfully.
+Output: [Plot saved to fibonacci.png]
+```
+
+## How It Works
+
+1. **Code Writer**: AssistantAgent generates Python code based on the task
+2. **Code Executor**: CodeExecutorAgent runs the code in an isolated Docker container
+3. **Round Robin**: Agents take turns - writer creates code, executor runs it
+4. **Feedback Loop**: Executor reports results back to the writer for iteration
+
+## Data Analysis Example
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent, CodeExecutorAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.ui import Console
+from autogen_ext.code_executors import DockerCommandLineCodeExecutor
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    async with DockerCommandLineCodeExecutor(
+        work_dir="./workspace",  # Mount local directory
+        image="python:3.11-slim",
+    ) as executor:
+        
+        assistant = AssistantAgent(
+            "data_analyst",
+            model_client=model_client,
+            system_message="""You are a data analyst. Write Python code to analyze data.
+            Use pandas, numpy, and matplotlib for analysis and visualization.
+            Always explain your findings.""",
+        )
+
+        code_executor = CodeExecutorAgent(
+            "executor",
+            code_executor=executor,
+        )
+
+        team = RoundRobinGroupChat([assistant, code_executor], max_turns=15)
+
+        await Console(
+            team.run_stream(
+                task="""Analyze the sales_data.csv file:
+                1. Load the data
+                2. Calculate basic statistics
+                3. Find the top 5 products by revenue
+                4. Create a bar chart of top products
+                5. Save insights to analysis_report.txt"""
+            )
+        )
+
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Security Best Practices
+
+<Warning>
+  Code execution can be dangerous. Always:
+  - Use Docker for isolation
+  - Limit network access
+  - Set resource limits
+  - Review generated code before execution
+  - Never execute untrusted code directly
+</Warning>
+
+### Secure Configuration
+
+```python
+from autogen_ext.code_executors import DockerCommandLineCodeExecutor
+
+executor = DockerCommandLineCodeExecutor(
+    image="python:3.11-slim",
+    timeout=60,  # Kill after 60 seconds
+    work_dir="./workspace",  # Isolated workspace
+    network_mode="none",  # No network access
+    # Resource limits
+    container_kwargs={
+        "mem_limit": "512m",  # 512 MB memory limit
+        "cpu_quota": 50000,   # 50% CPU
+    },
+)
+```
+
+## Custom Docker Image
+
+Create a custom image with required dependencies:
+
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir \
+    pandas \
+    numpy \
+    matplotlib \
+    scikit-learn \
+    requests
+
+WORKDIR /workspace
+```
+
+Build and use:
+
+```bash
+docker build -t my-python-executor .
+```
+
+```python
+executor = DockerCommandLineCodeExecutor(
+    image="my-python-executor",
+)
+```
+
+## Key Concepts
+
+<CardGroup cols={2}>
+  <Card title="Code Executor" icon="terminal">
+    Runs code in an isolated environment (Docker container).
+  </Card>
+  
+  <Card title="Round Robin" icon="rotate">
+    Agents take turns in sequence - useful for code generation and execution.
+  </Card>
+  
+  <Card title="Docker Isolation" icon="shield">
+    Prevents code from affecting the host system.
+  </Card>
+  
+  <Card title="Work Directory" icon="folder">
+    Shared directory between host and container for file access.
+  </Card>
+</CardGroup>
+
+## Common Use Cases
+
+- Data analysis and visualization
+- Mathematical calculations
+- File processing and transformation
+- Testing and validation
+- Automated report generation
+
+## Troubleshooting
+
+### Docker Not Running
+
+```
+Error: Cannot connect to Docker daemon
+```
+
+Start Docker Desktop or run:
+
+```bash
+sudo systemctl start docker
+```
+
+### Image Not Found
+
+Pull the required image:
+
+```bash
+docker pull python:3.11-slim
+```
+
+### Permission Denied
+
+Add your user to the docker group:
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Data Analysis" icon="chart-bar" href="/examples/data-analysis">
+    Build a complete data analysis agent
+  </Card>
+  
+  <Card title="Swarm Pattern" icon="network-wired" href="/examples/swarm-pattern">
+    Learn advanced multi-agent orchestration
+  </Card>
+</CardGroup>

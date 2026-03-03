@@ -1,0 +1,604 @@
+---
+title: Code Executors
+description: Execute code safely in Docker containers, Jupyter notebooks, or locally
+---
+
+Code executors provide sandboxed environments for running LLM-generated code. AutoGen supports multiple execution backends with varying levels of isolation and safety.
+
+## Installation
+
+Install the executor you need:
+
+<CodeGroup>
+```bash Docker
+pip install "autogen-ext[docker]"
+```
+
+```bash Local
+pip install "autogen-ext"  # Included in base package
+```
+</CodeGroup>
+
+## Docker Command Line Executor
+
+The `DockerCommandLineCodeExecutor` provides the highest level of safety by running code in isolated Docker containers.
+
+### Basic Usage
+
+```python
+import asyncio
+from autogen_core import CancellationToken
+from autogen_core.code_executor import CodeBlock
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+async def main():
+    executor = DockerCommandLineCodeExecutor()
+    await executor.start()
+    
+    try:
+        code_blocks = [
+            CodeBlock(language="python", code="print('Hello from Docker!')")
+        ]
+        result = await executor.execute_code_blocks(
+            code_blocks,
+            CancellationToken()
+        )
+        print(result.output)
+    finally:
+        await executor.stop()
+
+asyncio.run(main())
+```
+
+### Configuration Options
+
+<ParamField path="image" type="string" default="python:3-slim">
+  Docker image to use for code execution
+</ParamField>
+
+<ParamField path="container_name" type="string">
+  Name for the Docker container. Auto-generated if not provided
+</ParamField>
+
+<ParamField path="timeout" type="int" default="60">
+  Timeout in seconds for code execution
+</ParamField>
+
+<ParamField path="work_dir" type="Path | str">
+  Working directory for code execution. Uses a temporary directory if not provided
+</ParamField>
+
+<ParamField path="bind_dir" type="Path | str">
+  Directory to bind mount into the container. Defaults to `work_dir`
+</ParamField>
+
+<ParamField path="auto_remove" type="bool" default="true">
+  Automatically remove container when stopped
+</ParamField>
+
+<ParamField path="stop_container" type="bool" default="true">
+  Automatically stop container on exit
+</ParamField>
+
+<ParamField path="functions_module" type="string" default="functions">
+  Module name for custom functions
+</ParamField>
+
+### Advanced Configuration
+
+```python
+from pathlib import Path
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+executor = DockerCommandLineCodeExecutor(
+    image="python:3.11-slim",
+    container_name="autogen-executor",
+    timeout=120,
+    work_dir=Path("./workspace"),
+    auto_remove=True,
+    stop_container=True,
+)
+```
+
+### GPU Support
+
+Enable GPU access in containers:
+
+```python
+from docker.types import DeviceRequest
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+# Request all GPUs
+device_requests = [
+    DeviceRequest(count=-1, capabilities=[['gpu']])
+]
+
+executor = DockerCommandLineCodeExecutor(
+    image="pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime",
+    device_requests=device_requests,
+)
+```
+
+### Custom Volumes
+
+Mount additional volumes:
+
+```python
+executor = DockerCommandLineCodeExecutor(
+    image="python:3-slim",
+    extra_volumes={
+        '/host/data': {'bind': '/mnt/data', 'mode': 'ro'},
+        '/host/models': {'bind': '/mnt/models', 'mode': 'rw'},
+    },
+)
+```
+
+### Network Configuration
+
+Configure container networking:
+
+```python
+executor = DockerCommandLineCodeExecutor(
+    image="python:3-slim",
+    extra_hosts={
+        "kubernetes.docker.internal": "host-gateway",
+        "custom.service": "10.0.0.5",
+    },
+)
+```
+
+### Initialization Commands
+
+Run setup commands before each execution:
+
+```python
+executor = DockerCommandLineCodeExecutor(
+    image="python:3-slim",
+    init_command="apt-get update && apt-get install -y git",
+)
+```
+
+## Docker Jupyter Executor
+
+Execute code in a Jupyter kernel running inside Docker:
+
+```python
+from autogen_ext.code_executors.docker_jupyter import DockerJupyterCodeExecutor
+
+executor = DockerJupyterCodeExecutor(
+    image="jupyter/base-notebook:latest",
+    timeout=120,
+    work_dir="./workspace",
+)
+```
+
+### Benefits of Jupyter Execution
+
+- **Persistent state**: Variables and imports persist between executions
+- **Rich output**: Supports plots, HTML, and other rich media
+- **IPython features**: Magic commands and special syntax
+
+### Example with Matplotlib
+
+```python
+import asyncio
+from autogen_core import CancellationToken
+from autogen_core.code_executor import CodeBlock
+from autogen_ext.code_executors.docker_jupyter import DockerJupyterCodeExecutor
+
+async def main():
+    executor = DockerJupyterCodeExecutor()
+    await executor.start()
+    
+    try:
+        code_blocks = [
+            CodeBlock(language="python", code="""
+import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.linspace(0, 2*np.pi, 100)
+y = np.sin(x)
+
+plt.plot(x, y)
+plt.title('Sine Wave')
+plt.savefig('sine.png')
+print('Plot saved!')
+""")
+        ]
+        result = await executor.execute_code_blocks(code_blocks, CancellationToken())
+        print(result.output)
+    finally:
+        await executor.stop()
+
+asyncio.run(main())
+```
+
+## Local Command Line Executor
+
+<Warning>
+  The `LocalCommandLineCodeExecutor` executes code directly on your machine **without isolation**. Only use this with trusted code or in development environments.
+</Warning>
+
+### Basic Usage
+
+```python
+import asyncio
+from autogen_core import CancellationToken
+from autogen_core.code_executor import CodeBlock
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+async def main():
+    # Warning is displayed when creating the executor
+    executor = LocalCommandLineCodeExecutor(
+        work_dir="./workspace",
+        timeout=60,
+    )
+    await executor.start()
+    
+    try:
+        code_blocks = [
+            CodeBlock(language="python", code="print('Hello, World!')")
+        ]
+        result = await executor.execute_code_blocks(
+            code_blocks,
+            CancellationToken()
+        )
+        print(result.output)
+    finally:
+        await executor.stop()
+
+asyncio.run(main())
+```
+
+### Configuration Options
+
+<ParamField path="timeout" type="int" default="60">
+  Timeout in seconds for code execution
+</ParamField>
+
+<ParamField path="work_dir" type="Path | str">
+  Working directory. Defaults to a temporary directory
+</ParamField>
+
+<ParamField path="functions_module" type="string" default="functions">
+  Module name for custom functions
+</ParamField>
+
+<ParamField path="cleanup_temp_files" type="bool" default="true">
+  Automatically clean up temporary files after execution
+</ParamField>
+
+<ParamField path="virtual_env_context" type="SimpleNamespace">
+  Virtual environment to use for execution
+</ParamField>
+
+### Virtual Environment Support
+
+Run code in a specific virtual environment:
+
+```python
+import venv
+import asyncio
+from pathlib import Path
+from autogen_core import CancellationToken
+from autogen_core.code_executor import CodeBlock
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+async def main():
+    work_dir = Path("coding")
+    work_dir.mkdir(exist_ok=True)
+
+    # Create virtual environment
+    venv_dir = work_dir / ".venv"
+    venv_builder = venv.EnvBuilder(with_pip=True)
+    venv_builder.create(venv_dir)
+    venv_context = venv_builder.ensure_directories(venv_dir)
+
+    # Use virtual environment
+    executor = LocalCommandLineCodeExecutor(
+        work_dir=work_dir,
+        virtual_env_context=venv_context
+    )
+    await executor.start()
+    
+    try:
+        # Install package in virtual environment
+        await executor.execute_code_blocks(
+            [CodeBlock(language="bash", code="pip install requests")],
+            CancellationToken(),
+        )
+        
+        # Use installed package
+        result = await executor.execute_code_blocks(
+            [CodeBlock(language="python", code="import requests; print(requests.__version__)")],
+            CancellationToken(),
+        )
+        print(result.output)
+    finally:
+        await executor.stop()
+
+asyncio.run(main())
+```
+
+## Custom Functions
+
+Provide reusable functions to code executors:
+
+```python
+from autogen_core.code_executor import FunctionWithRequirements
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+def fetch_data(url: str) -> dict:
+    """Fetch data from a URL."""
+    import requests
+    return requests.get(url).json()
+
+# Wrap with requirements
+fetch_with_reqs = FunctionWithRequirements(
+    fetch_data,
+    python_packages=["requests"]
+)
+
+# Create executor with custom functions
+executor = DockerCommandLineCodeExecutor(
+    functions=[fetch_with_reqs],
+    functions_module="custom_tools",
+)
+```
+
+Access custom functions in generated code:
+
+```python
+code = """
+from custom_tools import fetch_data
+
+data = fetch_data('https://api.example.com/data')
+print(data)
+"""
+```
+
+## Supported Languages
+
+All executors support:
+
+- **Python**: `.py` files
+- **Bash/Shell**: `.sh` files (languages: `bash`, `shell`, `sh`)
+- **PowerShell**: `.ps1` files (languages: `pwsh`, `powershell`, `ps1`)
+
+### Python Execution
+
+```python
+code_blocks = [
+    CodeBlock(language="python", code="""
+import sys
+print(f"Python {sys.version}")
+""")
+]
+```
+
+### Shell Script Execution
+
+```python
+code_blocks = [
+    CodeBlock(language="bash", code="""
+echo "Running shell script"
+ls -la
+""")
+]
+```
+
+### PowerShell Execution
+
+```python
+code_blocks = [
+    CodeBlock(language="pwsh", code="""
+Write-Host "Running PowerShell"
+Get-ChildItem
+""")
+]
+```
+
+## File Handling
+
+Executors support file creation and modification:
+
+```python
+code_blocks = [
+    CodeBlock(language="python", code="""
+# filename: data_processor.py
+def process_data(items):
+    return [item.upper() for item in items]
+
+if __name__ == '__main__':
+    data = ['hello', 'world']
+    print(process_data(data))
+""")
+]
+```
+
+Files persist in the work directory between executions.
+
+## Error Handling
+
+Handle execution errors:
+
+```python
+import asyncio
+from autogen_core import CancellationToken
+from autogen_core.code_executor import CodeBlock
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+async def execute_safely(executor, code_blocks):
+    try:
+        result = await executor.execute_code_blocks(
+            code_blocks,
+            CancellationToken()
+        )
+        
+        if result.exit_code != 0:
+            print(f"Execution failed with exit code {result.exit_code}")
+            print(f"Output: {result.output}")
+            return None
+        
+        return result
+    except asyncio.TimeoutError:
+        print("Execution timed out")
+        return None
+    except Exception as e:
+        print(f"Execution error: {e}")
+        return None
+```
+
+## Security Best Practices
+
+### Use Docker in Production
+
+Always use Docker-based executors for production:
+
+```python
+# Good: Isolated execution
+executor = DockerCommandLineCodeExecutor()
+
+# Bad: Direct local execution
+# executor = LocalCommandLineCodeExecutor()  # Only for development!
+```
+
+### Set Resource Limits
+
+Limit container resources:
+
+```python
+import docker
+
+client = docker.from_env()
+container = client.containers.run(
+    "python:3-slim",
+    detach=True,
+    mem_limit="512m",  # Memory limit
+    cpu_quota=50000,   # CPU limit (50% of one core)
+)
+```
+
+### Use Read-Only Mounts
+
+Mount sensitive data as read-only:
+
+```python
+executor = DockerCommandLineCodeExecutor(
+    extra_volumes={
+        '/host/secrets': {'bind': '/mnt/secrets', 'mode': 'ro'},
+    },
+)
+```
+
+### Restrict Network Access
+
+Disable network for untrusted code:
+
+```python
+import docker
+
+client = docker.from_env()
+container = client.containers.run(
+    "python:3-slim",
+    network_disabled=True,
+    detach=True,
+)
+```
+
+## Context Manager Usage
+
+Use context managers for automatic cleanup:
+
+```python
+import asyncio
+from autogen_core import CancellationToken
+from autogen_core.code_executor import CodeBlock
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+async def main():
+    async with DockerCommandLineCodeExecutor() as executor:
+        code_blocks = [
+            CodeBlock(language="python", code="print('Hello!')")
+        ]
+        result = await executor.execute_code_blocks(
+            code_blocks,
+            CancellationToken()
+        )
+        print(result.output)
+    # Executor is automatically stopped and cleaned up
+
+asyncio.run(main())
+```
+
+## Integration with Agents
+
+Use executors with coding agents:
+
+```python
+from autogen_agentchat.agents import CodeExecutorAgent
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+
+executor = DockerCommandLineCodeExecutor()
+
+code_executor_agent = CodeExecutorAgent(
+    name="code_executor",
+    code_executor=executor,
+)
+```
+
+## Troubleshooting
+
+### Docker Not Running
+
+```
+Error: Cannot connect to the Docker daemon
+```
+
+**Solution**: Start Docker Desktop or the Docker daemon:
+
+```bash
+# Linux
+sudo systemctl start docker
+
+# macOS/Windows
+# Start Docker Desktop application
+```
+
+### Permission Denied
+
+```
+Error: Permission denied while trying to connect to Docker
+```
+
+**Solution**: Add your user to the docker group:
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### Timeout Errors
+
+```
+Error: Timeout
+```
+
+**Solution**: Increase the timeout value:
+
+```python
+executor = DockerCommandLineCodeExecutor(
+    timeout=300,  # 5 minutes
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Clients" icon="brain" href="/extensions/model-clients">
+    Configure LLM providers
+  </Card>
+  <Card title="Tools" icon="wrench" href="/extensions/tools">
+    Add tools and capabilities
+  </Card>
+</CardGroup>

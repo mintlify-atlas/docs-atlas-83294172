@@ -1,0 +1,462 @@
+---
+title: 'Agents'
+description: 'Understanding AssistantAgent, UserProxyAgent, and agent configuration in C#'
+---
+
+## What are Agents?
+
+Agents are the core building blocks of AutoGen applications. Each agent is an autonomous entity that can:
+
+- Generate responses using language models
+- Execute functions and tools
+- Communicate with other agents
+- Maintain conversation history
+- Apply custom logic through middleware
+
+## Core Agent Types
+
+AutoGen for .NET provides several built-in agent types:
+
+### AssistantAgent
+
+An AI-powered agent that uses language models to generate intelligent responses.
+
+```csharp
+using AutoGen;
+using AutoGen.OpenAI;
+
+var openAIKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var gpt4Config = new OpenAIConfig(openAIKey, "gpt-4");
+
+var assistant = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are a helpful AI assistant that can write code and solve problems.",
+    llmConfig: new ConversableAgentConfig
+    {
+        Temperature = 0.7,
+        ConfigList = [gpt4Config],
+        MaxToken = 2000
+    });
+```
+
+**Key Properties:**
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the agent in conversations
+</ParamField>
+
+<ParamField path="systemMessage" type="string" default="You are a helpful AI assistant">
+  Instructions that define the agent's personality, role, and behavior
+</ParamField>
+
+<ParamField path="llmConfig" type="ConversableAgentConfig" required>
+  Configuration for the language model, including API keys and parameters
+</ParamField>
+
+<ParamField path="humanInputMode" type="HumanInputMode" default="NEVER">
+  When to request human input (NEVER, ALWAYS, TERMINATE)
+</ParamField>
+
+<ParamField path="isTermination" type="Func<IEnumerable<IMessage>, CancellationToken, Task<bool>>">
+  Custom function to determine when to end the conversation
+</ParamField>
+
+### UserProxyAgent
+
+Represents a human user or autonomous proxy in the conversation.
+
+```csharp
+var userProxy = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.ALWAYS,
+    defaultReply: "Proceed");
+```
+
+**Human Input Modes:**
+
+<CodeGroup>
+```csharp ALWAYS - Interactive Mode
+// Prompts for user input before each message
+var user = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.ALWAYS);
+```
+
+```csharp NEVER - Autonomous Mode
+// Uses defaultReply without prompting
+var user = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.NEVER,
+    defaultReply: "Continue");
+```
+
+```csharp TERMINATE - Conditional Input
+// Only prompts when termination is suggested
+var user = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.TERMINATE);
+```
+</CodeGroup>
+
+### ConversableAgent Base Class
+
+Both `AssistantAgent` and `UserProxyAgent` inherit from `ConversableAgent`, which provides:
+
+- Message generation and handling
+- Function execution capabilities
+- Middleware support
+- Conversation management
+
+## Agent Configuration
+
+### ConversableAgentConfig
+
+Configures the language model behavior:
+
+```csharp
+var config = new ConversableAgentConfig
+{
+    Temperature = 0,              // 0 = deterministic, 1 = creative
+    MaxToken = 1024,              // Maximum tokens to generate
+    ConfigList = [                // List of LLM configurations
+        new OpenAIConfig(apiKey, "gpt-4"),
+        new OpenAIConfig(apiKey, "gpt-3.5-turbo") // Fallback
+    ],
+    TimeoutInSeconds = 60,        // Request timeout
+    StopSequence = ["END"]        // Sequences that stop generation
+};
+```
+
+### System Messages
+
+Craft effective system messages to guide agent behavior:
+
+<CodeGroup>
+```csharp Coding Assistant
+var coder = new AssistantAgent(
+    name: "coder",
+    systemMessage: @"
+        You are an expert C# developer.
+        When writing code:
+        - Use modern C# features and best practices
+        - Include error handling
+        - Add XML documentation comments
+        - Format code between ```csharp and ``` markers
+    ",
+    llmConfig: config);
+```
+
+```csharp Code Reviewer
+var reviewer = new AssistantAgent(
+    name: "reviewer",
+    systemMessage: @"
+        You are a code reviewer.
+        Review code for:
+        - Correctness and bugs
+        - Performance issues
+        - Security vulnerabilities
+        - Code style and readability
+        Provide constructive feedback.
+    ",
+    llmConfig: config);
+```
+
+```csharp Domain Expert
+var expert = new AssistantAgent(
+    name: "finance_expert",
+    systemMessage: @"
+        You are a financial analyst with expertise in:
+        - Portfolio optimization
+        - Risk assessment
+        - Market analysis
+        Provide data-driven insights and recommendations.
+    ",
+    llmConfig: config);
+```
+</CodeGroup>
+
+## Message Generation
+
+### Basic Message Sending
+
+```csharp
+using AutoGen.Core;
+
+// Send a simple text message
+var response = await assistant.SendAsync("What is 2 + 2?");
+Console.WriteLine(response.GetContent());
+
+// Send with message history
+var history = new List<IMessage>
+{
+    new TextMessage(Role.User, "Hello"),
+    new TextMessage(Role.Assistant, "Hi! How can I help?", from: "assistant")
+};
+
+var reply = await assistant.SendAsync(
+    "Can you help me with math?",
+    chatHistory: history);
+```
+
+### Streaming Responses
+
+Stream responses token-by-token for real-time output:
+
+```csharp
+await foreach (var message in assistant.GenerateStreamingReplyAsync(
+    new[] { new TextMessage(Role.User, "Write a story") }))
+{
+    Console.Write(message.GetContent());
+}
+```
+
+## Agent Communication
+
+### Two-Agent Chat
+
+Direct conversation between two agents:
+
+```csharp
+var assistant = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are a helpful assistant.",
+    llmConfig: config)
+    .RegisterPrintMessage();
+
+var user = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.ALWAYS)
+    .RegisterPrintMessage();
+
+// User initiates the conversation
+await user.InitiateChatAsync(
+    receiver: assistant,
+    message: "Help me write a sorting algorithm",
+    maxRound: 10);
+```
+
+### GenerateReplyAsync
+
+Lower-level method for custom conversation control:
+
+```csharp
+var messages = new List<IMessage>
+{
+    new TextMessage(Role.User, "Hello")
+};
+
+// Generate a reply
+var reply = await assistant.GenerateReplyAsync(messages);
+messages.Add(reply);
+
+// Continue the conversation
+messages.Add(new TextMessage(Role.User, "Tell me a joke"));
+reply = await assistant.GenerateReplyAsync(messages);
+```
+
+## Middleware and Extensions
+
+Enhance agents with middleware:
+
+### Print Message Middleware
+
+Format and display messages:
+
+```csharp
+var agent = new AssistantAgent(/*...*/);
+    .RegisterPrintMessage(); // Adds console output
+```
+
+### Custom Middleware
+
+Create custom message processing logic:
+
+```csharp
+var agent = new AssistantAgent(/*...*/)
+    .RegisterMiddleware(async (messages, options, agent, ct) =>
+    {
+        Console.WriteLine($"[{DateTime.Now}] Processing {messages.Count()} messages");
+        
+        // Call the next middleware/agent
+        var reply = await agent.GenerateReplyAsync(messages, options, ct);
+        
+        Console.WriteLine($"[{DateTime.Now}] Generated reply");
+        return reply;
+    });
+```
+
+### Message Connector Middleware
+
+Convert between different message formats:
+
+```csharp
+using AutoGen.OpenAI.Extension;
+
+var agent = new OpenAIChatAgent(/*...*/)
+    .RegisterMessageConnector() // Converts AutoGen messages to OpenAI format
+    .RegisterPrintMessage();
+```
+
+## Termination Conditions
+
+### Default Termination
+
+Conversations end when:
+- Maximum rounds reached
+- Termination message received
+- Custom termination condition met
+
+### Custom Termination
+
+```csharp
+var assistant = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are a helpful assistant.",
+    llmConfig: config,
+    isTermination: async (messages, ct) =>
+    {
+        var lastMessage = messages.LastOrDefault();
+        if (lastMessage == null) return false;
+        
+        var content = lastMessage.GetContent()?.ToLower();
+        
+        // Terminate if message contains "goodbye" or "done"
+        return content?.Contains("goodbye") == true ||
+               content?.Contains("done") == true;
+    });
+```
+
+## Provider-Specific Agents
+
+### OpenAIChatAgent
+
+```csharp
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using OpenAI;
+
+var openAIClient = new OpenAIClient(apiKey);
+var agent = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4"),
+    name: "assistant",
+    systemMessage: "You are a helpful assistant")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+### AnthropicClientAgent
+
+```csharp
+using AutoGen.Anthropic;
+using AutoGen.Anthropic.Extensions;
+
+var anthropicClient = new AnthropicClient(
+    new HttpClient(),
+    AnthropicConstants.Endpoint,
+    apiKey);
+
+var agent = new AnthropicClientAgent(
+    anthropicClient,
+    "assistant",
+    AnthropicConstants.Claude3Haiku)
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+### ChatCompletionsClientAgent (Azure AI)
+
+```csharp
+using AutoGen.AzureAIInference;
+using AutoGen.AzureAIInference.Extension;
+using Azure.AI.Inference;
+
+var client = new ChatCompletionsClient(
+    new Uri(endpoint),
+    new AzureKeyCredential(apiKey));
+
+var agent = new ChatCompletionsClientAgent(
+    chatCompletionsClient: client,
+    name: "assistant",
+    modelName: "gpt-4",
+    systemMessage: "You are a helpful assistant")
+    .RegisterMessageConnector();
+```
+
+### SemanticKernelAgent
+
+```csharp
+using AutoGen.SemanticKernel;
+using AutoGen.SemanticKernel.Extension;
+using Microsoft.SemanticKernel;
+
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion("gpt-4", apiKey)
+    .Build();
+
+var agent = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "assistant",
+    systemMessage: "You are a helpful assistant")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="System Message Design">
+    - Be specific about the agent's role and responsibilities
+    - Include output format requirements
+    - Specify constraints and limitations
+    - Use examples when needed
+    - Keep it concise but complete
+  </Accordion>
+  
+  <Accordion title="Agent Naming">
+    - Use descriptive, unique names
+    - Avoid special characters
+    - Keep names short and memorable
+    - Use lowercase for consistency
+  </Accordion>
+  
+  <Accordion title="Configuration">
+    - Set `Temperature = 0` for deterministic output
+    - Use `Temperature = 0.7-1.0` for creative tasks
+    - Set appropriate token limits to control costs
+    - Configure timeouts for long-running operations
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    ```csharp
+    try
+    {
+        var reply = await assistant.SendAsync(message);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error: {ex.Message}");
+        // Handle retry logic or fallback
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Create multi-agent conversations
+  </Card>
+  
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Add custom functions to agents
+  </Card>
+  
+  <Card title="Code Execution" icon="terminal" href="/dotnet/code-execution">
+    Execute code dynamically
+  </Card>
+  
+  <Card title="OpenAI Integration" icon="openai" href="/dotnet/openai">
+    Learn about OpenAI-specific features
+  </Card>
+</CardGroup>

@@ -1,0 +1,506 @@
+---
+title: Customer Support Bot
+description: Build an intelligent customer support system with AutoGen
+---
+
+This example demonstrates how to build a complete customer support system that can handle inquiries, route to specialists, and escalate to humans when needed.
+
+## What You'll Learn
+
+- Building customer service agent workflows
+- Intelligent ticket routing and triage
+- Integration with knowledge bases
+- Human-in-the-loop escalation
+- Multi-channel support (web, API)
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen and web framework">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]" fastapi uvicorn aiofiles pyyaml
+    ```
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## Architecture
+
+The customer support system uses:
+
+- **Triage Agent**: Routes inquiries to the right specialist
+- **Specialist Agents**: Handle billing, technical, and general support
+- **Escalation Agent**: Determines when to involve humans
+- **Knowledge Base**: Stores FAQs and solutions
+
+## Code Example
+
+```python
+import asyncio
+import yaml
+from typing import Dict, List, Optional
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.conditions import TextMentionTermination
+from autogen_agentchat.teams import Swarm
+from autogen_agentchat.ui import Console
+from autogen_core.models import ChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+class CustomerSupportSystem:
+    """Multi-agent customer support system."""
+    
+    def __init__(self, model_client: ChatCompletionClient, knowledge_base: Dict):
+        self.model_client = model_client
+        self.knowledge_base = knowledge_base
+        self.agents = {}
+        self._setup_agents()
+    
+    def _setup_agents(self):
+        """Initialize all support agents."""
+        
+        # Triage agent - routes to specialists
+        self.agents["triage"] = AssistantAgent(
+            "triage_agent",
+            model_client=self.model_client,
+            description="Routes customer inquiries to the appropriate specialist.",
+            system_message=f"""You are a customer support triage agent.
+            
+            Analyze customer inquiries and route them to the right specialist:
+            - billing_specialist: Payment issues, invoices, refunds, subscriptions
+            - technical_specialist: Product bugs, errors, technical issues
+            - general_support: Account questions, general information, other issues
+            
+            If the issue is critical or the customer is very frustrated, 
+            mention 'ESCALATE' and route to escalation_agent.
+            
+            Knowledge Base:
+            {yaml.dump(self.knowledge_base, default_flow_style=False)}
+            
+            Be professional, empathetic, and efficient.""",
+            handoffs=["billing_specialist", "technical_specialist", "general_support", "escalation_agent"],
+        )
+        
+        # Billing specialist
+        self.agents["billing_specialist"] = AssistantAgent(
+            "billing_specialist",
+            model_client=self.model_client,
+            description="Handles billing, payments, and subscription issues.",
+            system_message="""You are a billing specialist.
+            
+            Help customers with:
+            - Payment and invoice questions
+            - Refund requests
+            - Subscription changes
+            - Billing errors
+            
+            Be clear about refund policies and timelines.
+            If you can resolve the issue, end with 'RESOLVED'.
+            If you need to escalate, mention 'ESCALATE'.
+            
+            Always remain professional and helpful.""",
+            handoffs=["escalation_agent"],
+        )
+        
+        # Technical specialist
+        self.agents["technical_specialist"] = AssistantAgent(
+            "technical_specialist",
+            model_client=self.model_client,
+            description="Handles technical issues and troubleshooting.",
+            system_message="""You are a technical support specialist.
+            
+            Help customers with:
+            - Bug reports and errors
+            - Login/access issues  
+            - Feature questions
+            - Integration problems
+            
+            Provide step-by-step troubleshooting.
+            If issue is resolved, end with 'RESOLVED'.
+            For complex bugs, mention 'ESCALATE' for engineering team.
+            
+            Be patient and thorough.""",
+            handoffs=["escalation_agent"],
+        )
+        
+        # General support
+        self.agents["general_support"] = AssistantAgent(
+            "general_support",
+            model_client=self.model_client,
+            description="Handles general questions and information requests.",
+            system_message="""You are a general support agent.
+            
+            Help customers with:
+            - Account questions
+            - General product information
+            - Feature requests
+            - Other non-technical, non-billing issues
+            
+            Be friendly, informative, and helpful.
+            If resolved, end with 'RESOLVED'.
+            For complex issues, mention 'ESCALATE'.""",
+            handoffs=["escalation_agent"],
+        )
+        
+        # Escalation agent
+        self.agents["escalation_agent"] = AssistantAgent(
+            "escalation_agent",
+            model_client=self.model_client,
+            description="Handles escalations and creates tickets for human agents.",
+            system_message="""You are an escalation manager.
+            
+            Create detailed escalation tickets including:
+            - Customer information
+            - Issue summary
+            - Steps taken so far
+            - Priority level (Low/Medium/High/Critical)
+            - Recommended next steps
+            
+            Be thorough and professional.
+            Always end with 'ESCALATED'.""",
+        )
+    
+    async def handle_inquiry(self, inquiry: str, customer_id: str = "unknown") -> str:
+        """Handle a customer support inquiry."""
+        
+        # Create swarm with all agents
+        team = Swarm(
+            participants=list(self.agents.values()),
+            termination_condition=TextMentionTermination(["RESOLVED", "ESCALATED"]),
+        )
+        
+        # Process inquiry
+        result = await Console(
+            team.run_stream(
+                task=f"Customer {customer_id}: {inquiry}"
+            )
+        )
+        
+        return result.messages[-1].content
+
+
+# Knowledge base with common solutions
+KNOWLEDGE_BASE = {
+    "common_issues": {
+        "login_failed": "Password reset available at /reset-password. Check email for reset link.",
+        "payment_declined": "Verify card details, check with bank. We support Visa, MC, AmEx.",
+        "slow_performance": "Clear browser cache, try different browser, check internet speed.",
+    },
+    "policies": {
+        "refund_window": "30 days from purchase",
+        "response_time": "24 hours for standard, 4 hours for urgent",
+        "data_retention": "90 days after account closure",
+    },
+}
+
+
+async def main() -> None:
+    # Initialize model client
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Create support system
+    support = CustomerSupportSystem(model_client, KNOWLEDGE_BASE)
+    
+    # Example inquiries
+    inquiries = [
+        "I was charged twice this month and need a refund immediately!",
+        "I'm getting a 404 error when trying to access my dashboard.",
+        "How do I change my email address on my account?",
+    ]
+    
+    for i, inquiry in enumerate(inquiries, 1):
+        print(f"\n{'='*80}")
+        print(f"INQUIRY {i}: {inquiry}")
+        print(f"{'='*80}")
+        
+        response = await support.handle_inquiry(inquiry, customer_id=f"CUST{i:04d}")
+        
+        print(f"\n{'='*80}")
+        print("RESOLUTION")
+        print(f"{'='*80}")
+        print(response)
+    
+    await model_client.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python customer_support.py
+```
+
+## Expected Output
+
+```
+================================================================================
+INQUIRY 1: I was charged twice this month and need a refund immediately!
+================================================================================
+
+---------- triage_agent ----------
+This is a billing issue with urgency. Routing to billing specialist.
+
+---------- billing_specialist ----------
+I understand your frustration with the double charge. Let me help you.
+
+I can see this is a duplicate charge. I'll process a refund for the duplicate 
+transaction. The refund will appear in 3-5 business days.
+
+Reference number: REF-2024-001
+
+RESOLVED
+
+================================================================================
+RESOLUTION
+================================================================================
+Refund initiated for duplicate charge, 3-5 business days. REF-2024-001
+```
+
+## FastAPI Integration
+
+Create a web API for the support system:
+
+```python
+import json
+from typing import Dict
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+app = FastAPI(title="Customer Support API")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Global support system instance
+support_system: Optional[CustomerSupportSystem] = None
+
+
+class SupportRequest(BaseModel):
+    inquiry: str
+    customer_id: str
+    metadata: Optional[Dict] = None
+
+
+class SupportResponse(BaseModel):
+    status: str
+    resolution: str
+    ticket_id: Optional[str] = None
+
+
+@app.on_event("startup")
+async def startup():
+    """Initialize support system on startup."""
+    global support_system
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    support_system = CustomerSupportSystem(model_client, KNOWLEDGE_BASE)
+
+
+@app.post("/support/inquiry", response_model=SupportResponse)
+async def handle_support_request(request: SupportRequest) -> SupportResponse:
+    """Handle a support inquiry via REST API."""
+    resolution = await support_system.handle_inquiry(
+        request.inquiry,
+        request.customer_id
+    )
+    
+    status = "resolved" if "RESOLVED" in resolution else "escalated"
+    
+    return SupportResponse(
+        status=status,
+        resolution=resolution,
+        ticket_id=f"TKT-{request.customer_id}-{int(asyncio.get_event_loop().time())}"
+    )
+
+
+@app.websocket("/support/chat")
+async def support_chat(websocket: WebSocket):
+    """Handle real-time support chat via WebSocket."""
+    await websocket.accept()
+    
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_json()
+            inquiry = data.get("message")
+            customer_id = data.get("customer_id", "unknown")
+            
+            # Process inquiry
+            resolution = await support_system.handle_inquiry(inquiry, customer_id)
+            
+            # Send response
+            await websocket.send_json({
+                "status": "resolved" if "RESOLVED" in resolution else "escalated",
+                "message": resolution,
+            })
+    
+    except WebSocketDisconnect:
+        print(f"Client disconnected")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+Run the API:
+
+```bash
+python support_api.py
+```
+
+Test with curl:
+
+```bash
+curl -X POST http://localhost:8000/support/inquiry \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inquiry": "I need help with my billing",
+    "customer_id": "CUST0001"
+  }'
+```
+
+## Key Concepts
+
+<CardGroup cols={2}>
+  <Card title="Intelligent Routing" icon="route">
+    Triage agent routes inquiries to the right specialist automatically.
+  </Card>
+  
+  <Card title="Handoffs" icon="hand">
+    Agents can transfer complex issues to specialists or escalation.
+  </Card>
+  
+  <Card title="Knowledge Base" icon="book">
+    Common solutions and policies embedded in agent context.
+  </Card>
+  
+  <Card title="Human Escalation" icon="user-headset">
+    Automatic escalation for complex or sensitive issues.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+1. **Clear Routing Logic**: Define when to use each specialist
+2. **Empathetic Tone**: Train agents to be understanding and helpful
+3. **Knowledge Integration**: Keep knowledge base up-to-date
+4. **Escalation Thresholds**: Define clear criteria for human involvement
+5. **Response Tracking**: Log all interactions for analysis
+6. **Privacy**: Don't expose sensitive customer data to LLMs
+
+## Production Enhancements
+
+### Add Session Management
+
+```python
+from datetime import datetime
+from typing import Dict, List
+
+class SupportSession:
+    def __init__(self, customer_id: str):
+        self.customer_id = customer_id
+        self.started_at = datetime.now()
+        self.messages: List[Dict] = []
+        self.status = "active"
+    
+    def add_message(self, role: str, content: str):
+        self.messages.append({
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now().isoformat()
+        })
+```
+
+### Add Analytics
+
+```python
+class SupportAnalytics:
+    def __init__(self):
+        self.metrics = {
+            "total_inquiries": 0,
+            "resolved": 0,
+            "escalated": 0,
+            "avg_resolution_time": 0,
+        }
+    
+    def track_resolution(self, inquiry_type: str, resolution_time: float, status: str):
+        self.metrics["total_inquiries"] += 1
+        if status == "resolved":
+            self.metrics["resolved"] += 1
+        else:
+            self.metrics["escalated"] += 1
+        # Update average resolution time
+```
+
+### Add Sentiment Analysis
+
+```python
+from textblob import TextBlob
+
+def analyze_customer_sentiment(inquiry: str) -> str:
+    """Analyze customer sentiment to prioritize urgent cases."""
+    sentiment = TextBlob(inquiry).sentiment.polarity
+    
+    # Check for urgent keywords
+    urgent_keywords = ["urgent", "immediately", "asap", "critical", "emergency"]
+    is_urgent = any(keyword in inquiry.lower() for keyword in urgent_keywords)
+    
+    if sentiment < -0.5 or is_urgent:
+        return "high_priority"
+    elif sentiment < 0:
+        return "medium_priority"
+    else:
+        return "normal_priority"
+```
+
+## Troubleshooting
+
+### Agent Not Routing Correctly
+
+Improve routing instructions in triage agent:
+
+```python
+system_message="""You are a triage agent. 
+Route based on these EXACT criteria:
+- Keywords 'payment', 'charge', 'refund', 'bill' → billing_specialist
+- Keywords 'error', 'bug', 'not working', 'crash' → technical_specialist
+- Everything else → general_support
+"""
+```
+
+### No Escalation When Needed
+
+Add explicit escalation triggers:
+
+```python
+# In each specialist agent:
+if customer_frustrated or issue_too_complex or requires_manual_review:
+    mention "ESCALATE" and hand off to escalation_agent
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Data Analysis" icon="chart-line" href="/examples/data-analysis">
+    Build automated data analysis agents
+  </Card>
+  
+  <Card title="Teams Documentation" icon="users" href="/core-concepts/teams">
+    Learn more about team patterns
+  </Card>
+</CardGroup>

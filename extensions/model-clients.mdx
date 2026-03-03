@@ -1,0 +1,543 @@
+---
+title: Model Clients
+description: Connect to OpenAI, Anthropic, Azure, Ollama, and other LLM providers
+---
+
+Model clients provide the interface between AutoGen agents and large language models. AutoGen supports multiple LLM providers through the `autogen-ext` package.
+
+## Installation
+
+Install the extension for your chosen provider:
+
+<CodeGroup>
+```bash OpenAI
+pip install "autogen-ext[openai]"
+```
+
+```bash Anthropic
+pip install "autogen-ext[anthropic]"
+```
+
+```bash Azure
+pip install "autogen-ext[azure]"
+```
+
+```bash Ollama
+pip install "autogen-ext[ollama]"
+```
+
+```bash Llama.cpp
+pip install "autogen-ext[llama-cpp]"
+```
+</CodeGroup>
+
+## OpenAI
+
+The `OpenAIChatCompletionClient` supports GPT-4, GPT-3.5, o1, and o3 models.
+
+### Basic Usage
+
+```python
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.agents import AssistantAgent
+
+# Create OpenAI client
+model_client = OpenAIChatCompletionClient(
+    model="gpt-4o",
+    api_key="sk-...",  # Or set OPENAI_API_KEY environment variable
+)
+
+# Use with an agent
+agent = AssistantAgent(
+    name="assistant",
+    model_client=model_client,
+    system_message="You are a helpful assistant."
+)
+```
+
+### Configuration Options
+
+<ParamField path="model" type="string" required>
+  The model name (e.g., `gpt-4o`, `gpt-4-turbo`, `gpt-3.5-turbo`)
+</ParamField>
+
+<ParamField path="api_key" type="string">
+  OpenAI API key. If not provided, reads from `OPENAI_API_KEY` environment variable
+</ParamField>
+
+<ParamField path="temperature" type="float" default="1.0">
+  Sampling temperature between 0 and 2
+</ParamField>
+
+<ParamField path="top_p" type="float" default="1.0">
+  Nucleus sampling parameter
+</ParamField>
+
+<ParamField path="max_tokens" type="int">
+  Maximum tokens to generate
+</ParamField>
+
+<ParamField path="timeout" type="float" default="60.0">
+  Request timeout in seconds
+</ParamField>
+
+<ParamField path="base_url" type="string">
+  Override the default OpenAI API endpoint
+</ParamField>
+
+### Advanced Example
+
+```python
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+client = OpenAIChatCompletionClient(
+    model="gpt-4o",
+    api_key="sk-...",
+    temperature=0.7,
+    top_p=0.9,
+    max_tokens=4096,
+    timeout=120.0,
+    # For Azure-compatible endpoints
+    base_url="https://custom-endpoint.openai.azure.com/",
+)
+```
+
+## Azure OpenAI
+
+The `AzureOpenAIChatCompletionClient` connects to Azure OpenAI Service.
+
+### Basic Usage
+
+```python
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+
+client = AzureOpenAIChatCompletionClient(
+    model="gpt-4o",
+    api_version="2024-02-01",
+    azure_endpoint="https://YOUR-RESOURCE-NAME.openai.azure.com",
+    api_key="...",  # Or use Azure AD authentication
+    azure_deployment="gpt-4o-deployment",  # Your deployment name
+)
+```
+
+### Configuration Options
+
+<ParamField path="azure_endpoint" type="string" required>
+  The Azure OpenAI endpoint URL
+</ParamField>
+
+<ParamField path="api_version" type="string" required>
+  Azure OpenAI API version (e.g., `2024-02-01`)
+</ParamField>
+
+<ParamField path="azure_deployment" type="string" required>
+  Your deployment name in Azure
+</ParamField>
+
+<ParamField path="api_key" type="string">
+  Azure OpenAI API key
+</ParamField>
+
+<ParamField path="azure_ad_token" type="string">
+  Azure Active Directory token for authentication
+</ParamField>
+
+### Azure AD Authentication
+
+```python
+from azure.identity import DefaultAzureCredential
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+
+# Using Azure AD authentication
+credential = DefaultAzureCredential()
+token = credential.get_token("https://cognitiveservices.azure.com/.default")
+
+client = AzureOpenAIChatCompletionClient(
+    model="gpt-4o",
+    api_version="2024-02-01",
+    azure_endpoint="https://YOUR-RESOURCE-NAME.openai.azure.com",
+    azure_ad_token=token.token,
+    azure_deployment="gpt-4o-deployment",
+)
+```
+
+## Anthropic
+
+The `AnthropicChatCompletionClient` supports Claude models.
+
+### Basic Usage
+
+```python
+from autogen_ext.models.anthropic import AnthropicChatCompletionClient
+
+client = AnthropicChatCompletionClient(
+    model="claude-3-5-sonnet-20241022",
+    api_key="sk-ant-...",  # Or set ANTHROPIC_API_KEY
+    max_tokens=4096,
+)
+```
+
+### Configuration Options
+
+<ParamField path="model" type="string" required>
+  Claude model name:
+  - `claude-3-5-sonnet-20241022` - Most capable
+  - `claude-3-opus-20240229` - Previous flagship
+  - `claude-3-sonnet-20240229` - Balanced
+  - `claude-3-haiku-20240307` - Fast and compact
+</ParamField>
+
+<ParamField path="api_key" type="string">
+  Anthropic API key. Falls back to `ANTHROPIC_API_KEY` environment variable
+</ParamField>
+
+<ParamField path="max_tokens" type="int" required>
+  Maximum tokens to generate. Required for Anthropic models
+</ParamField>
+
+<ParamField path="temperature" type="float" default="1.0">
+  Sampling temperature between 0 and 1
+</ParamField>
+
+<ParamField path="top_p" type="float">
+  Nucleus sampling parameter
+</ParamField>
+
+<ParamField path="top_k" type="int">
+  Only sample from top K options
+</ParamField>
+
+### Extended Thinking (Claude 3.5 Sonnet)
+
+Claude 3.5 Sonnet supports extended thinking mode:
+
+```python
+from autogen_ext.models.anthropic import AnthropicChatCompletionClient
+
+client = AnthropicChatCompletionClient(
+    model="claude-3-5-sonnet-20241022",
+    api_key="sk-ant-...",
+    max_tokens=16000,
+    thinking={
+        "type": "enabled",
+        "budget_tokens": 10000,  # Tokens for thinking
+    },
+)
+```
+
+## AWS Bedrock
+
+Use Claude models through AWS Bedrock:
+
+```python
+from autogen_ext.models.anthropic import AnthropicBedrockChatCompletionClient
+
+client = AnthropicBedrockChatCompletionClient(
+    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+    max_tokens=4096,
+    # AWS credentials from environment or ~/.aws/credentials
+    aws_region="us-west-2",
+)
+```
+
+<ParamField path="aws_region" type="string">
+  AWS region (e.g., `us-west-2`, `us-east-1`)
+</ParamField>
+
+<ParamField path="aws_access_key" type="string">
+  AWS access key ID
+</ParamField>
+
+<ParamField path="aws_secret_key" type="string">
+  AWS secret access key
+</ParamField>
+
+<ParamField path="aws_session_token" type="string">
+  AWS session token for temporary credentials
+</ParamField>
+
+## Ollama
+
+The `OllamaChatCompletionClient` connects to local Ollama instances.
+
+### Basic Usage
+
+```python
+from autogen_ext.models.ollama import OllamaChatCompletionClient
+
+client = OllamaChatCompletionClient(
+    model="llama3.2",
+    host="http://localhost:11434",
+)
+```
+
+### Configuration Options
+
+<ParamField path="model" type="string" required>
+  Ollama model name (e.g., `llama3.2`, `mistral`, `qwen2.5`)
+</ParamField>
+
+<ParamField path="host" type="string" default="http://localhost:11434">
+  Ollama server URL
+</ParamField>
+
+<ParamField path="temperature" type="float">
+  Sampling temperature
+</ParamField>
+
+<ParamField path="top_p" type="float">
+  Nucleus sampling parameter
+</ParamField>
+
+<ParamField path="top_k" type="int">
+  Top-K sampling parameter
+</ParamField>
+
+<ParamField path="num_ctx" type="int">
+  Context window size
+</ParamField>
+
+<ParamField path="num_predict" type="int">
+  Maximum tokens to generate
+</ParamField>
+
+### Advanced Configuration
+
+```python
+from autogen_ext.models.ollama import OllamaChatCompletionClient
+
+client = OllamaChatCompletionClient(
+    model="llama3.2",
+    host="http://localhost:11434",
+    temperature=0.7,
+    top_p=0.9,
+    top_k=40,
+    num_ctx=8192,  # Context window
+    num_predict=2048,  # Max generation
+    repeat_penalty=1.1,
+    seed=42,  # For reproducibility
+)
+```
+
+## Llama.cpp
+
+Run GGUF models locally with `llama.cpp`:
+
+### Installation
+
+```bash
+pip install "autogen-ext[llama-cpp]"
+```
+
+### Basic Usage
+
+```python
+from autogen_ext.models.llama_cpp import LlamaCppChatCompletionClient
+
+client = LlamaCppChatCompletionClient(
+    model_path="./models/llama-3.2-3b-instruct-q8_0.gguf",
+    n_ctx=8192,  # Context window
+    n_gpu_layers=35,  # Offload layers to GPU
+)
+```
+
+### Configuration Options
+
+<ParamField path="model_path" type="string" required>
+  Path to the GGUF model file
+</ParamField>
+
+<ParamField path="n_ctx" type="int" default="2048">
+  Context window size
+</ParamField>
+
+<ParamField path="n_gpu_layers" type="int" default="0">
+  Number of layers to offload to GPU
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.8">
+  Sampling temperature
+</ParamField>
+
+<ParamField path="top_p" type="float" default="0.95">
+  Nucleus sampling
+</ParamField>
+
+<ParamField path="top_k" type="int" default="40">
+  Top-K sampling
+</ParamField>
+
+<ParamField path="max_tokens" type="int" default="512">
+  Maximum tokens to generate
+</ParamField>
+
+## Azure AI
+
+Connect to Azure AI model deployments:
+
+```python
+from autogen_ext.models.azure import AzureAIChatCompletionClient
+
+client = AzureAIChatCompletionClient(
+    endpoint="https://YOUR-ENDPOINT.inference.ai.azure.com",
+    credential="YOUR-API-KEY",
+    model="gpt-4o",
+)
+```
+
+## Streaming Responses
+
+All model clients support streaming:
+
+```python
+from autogen_core import CancellationToken
+from autogen_core.models import UserMessage
+
+async def stream_example(client):
+    messages = [UserMessage(content="Tell me a story", source="user")]
+    
+    async for chunk in client.create_stream(messages, CancellationToken()):
+        if chunk.content:
+            print(chunk.content, end="", flush=True)
+```
+
+## Model Capabilities
+
+Query model capabilities:
+
+```python
+capabilities = client.capabilities
+
+print(f"Vision: {capabilities.vision}")
+print(f"Function calling: {capabilities.function_calling}")
+print(f"JSON output: {capabilities.json_output}")
+```
+
+## Token Counting
+
+Count tokens before sending requests:
+
+```python
+from autogen_core.models import UserMessage
+
+messages = [UserMessage(content="Hello, world!", source="user")]
+token_count = client.count_tokens(messages)
+print(f"Message uses {token_count} tokens")
+```
+
+## Usage Tracking
+
+Track token usage from responses:
+
+```python
+from autogen_core import CancellationToken
+from autogen_core.models import UserMessage
+
+messages = [UserMessage(content="Explain quantum computing", source="user")]
+result = await client.create(messages, CancellationToken())
+
+print(f"Prompt tokens: {result.usage.prompt_tokens}")
+print(f"Completion tokens: {result.usage.completion_tokens}")
+```
+
+## Error Handling
+
+Handle common errors:
+
+```python
+from openai import RateLimitError, APIError
+from anthropic import AnthropicError
+import asyncio
+
+async def create_with_retry(client, messages, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return await client.create(messages, CancellationToken())
+        except RateLimitError:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+            else:
+                raise
+        except APIError as e:
+            print(f"API error: {e}")
+            raise
+```
+
+## Environment Variables
+
+Model clients respect standard environment variables:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+export OPENAI_ORG_ID="org-..."
+
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Azure OpenAI
+export AZURE_OPENAI_ENDPOINT="https://..."
+export AZURE_OPENAI_API_KEY="..."
+
+# AWS (for Bedrock)
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_REGION="us-west-2"
+```
+
+## Best Practices
+
+### Use Environment Variables
+
+Store API keys in environment variables instead of hardcoding:
+
+```python
+import os
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+# Good: reads from environment
+client = OpenAIChatCompletionClient(
+    model="gpt-4o",
+    api_key=os.getenv("OPENAI_API_KEY"),
+)
+
+# Better: automatic from environment
+client = OpenAIChatCompletionClient(model="gpt-4o")
+```
+
+### Set Timeouts
+
+Always configure appropriate timeouts:
+
+```python
+client = OpenAIChatCompletionClient(
+    model="gpt-4o",
+    timeout=120.0,  # 2 minute timeout
+)
+```
+
+### Monitor Usage
+
+Track token usage to manage costs:
+
+```python
+total_prompt_tokens = 0
+total_completion_tokens = 0
+
+result = await client.create(messages, CancellationToken())
+total_prompt_tokens += result.usage.prompt_tokens
+total_completion_tokens += result.usage.completion_tokens
+
+print(f"Total usage: {total_prompt_tokens + total_completion_tokens} tokens")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Code Executors" icon="code" href="/extensions/code-executors">
+    Set up code execution environments
+  </Card>
+  <Card title="Tools" icon="wrench" href="/extensions/tools">
+    Add tools and capabilities to agents
+  </Card>
+</CardGroup>

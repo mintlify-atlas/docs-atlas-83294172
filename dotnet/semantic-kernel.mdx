@@ -1,0 +1,625 @@
+---
+title: 'Semantic Kernel Integration'
+description: 'Use AutoGen with Microsoft Semantic Kernel agents and plugins'
+---
+
+## Overview
+
+The `AutoGen.SemanticKernel` package enables integration between AutoGen and [Microsoft Semantic Kernel](https://learn.microsoft.com/semantic-kernel/), allowing you to:
+
+- Use Semantic Kernel agents in AutoGen workflows
+- Access Semantic Kernel plugins from AutoGen agents
+- Combine both frameworks' strengths
+- Leverage existing Semantic Kernel code
+
+## Installation
+
+```bash
+dotnet add package AutoGen.SemanticKernel
+```
+
+You'll also need the Semantic Kernel package:
+
+```bash
+dotnet add package Microsoft.SemanticKernel
+```
+
+## Basic Setup
+
+<Steps>
+  <Step title="Create a Semantic Kernel">
+    ```csharp
+    using Microsoft.SemanticKernel;
+
+    var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+    var modelId = "gpt-4";
+
+    var kernel = Kernel.CreateBuilder()
+        .AddOpenAIChatCompletion(
+            modelId: modelId,
+            apiKey: apiKey)
+        .Build();
+    ```
+  </Step>
+
+  <Step title="Create a SemanticKernelAgent">
+    ```csharp
+    using AutoGen.SemanticKernel;
+    using AutoGen.SemanticKernel.Extension;
+    using AutoGen.Core;
+
+    var agent = new SemanticKernelAgent(
+        kernel: kernel,
+        name: "assistant",
+        systemMessage: "You are a helpful AI assistant")
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+    ```
+  </Step>
+
+  <Step title="Use the agent">
+    ```csharp
+    var response = await agent.SendAsync("Hello, how are you?");
+    Console.WriteLine(response.GetContent());
+    ```
+  </Step>
+</Steps>
+
+## SemanticKernelAgent
+
+The main agent class for Semantic Kernel integration:
+
+```csharp
+using AutoGen.SemanticKernel;
+using AutoGen.SemanticKernel.Extension;
+using Microsoft.SemanticKernel;
+
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion("gpt-4", apiKey)
+    .Build();
+
+var agent = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "assistant",
+    systemMessage: "You are a helpful assistant")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+### Constructor Parameters
+
+<ParamField path="kernel" type="Kernel" required>
+  Configured Semantic Kernel instance
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the agent
+</ParamField>
+
+<ParamField path="systemMessage" type="string">
+  Instructions defining the agent's behavior
+</ParamField>
+
+## Using Semantic Kernel Plugins
+
+Leverage Semantic Kernel plugins in AutoGen:
+
+<Steps>
+  <Step title="Create Semantic Kernel plugins">
+    ```csharp
+    using Microsoft.SemanticKernel;
+    using System.ComponentModel;
+
+    public class MathPlugin
+    {
+        [KernelFunction, Description("Add two numbers")]
+        public int Add(
+            [Description("First number")] int a,
+            [Description("Second number")] int b)
+        {
+            return a + b;
+        }
+
+        [KernelFunction, Description("Multiply two numbers")]
+        public int Multiply(
+            [Description("First number")] int a,
+            [Description("Second number")] int b)
+        {
+            return a * b;
+        }
+    }
+
+    public class TimePlugin
+    {
+        [KernelFunction, Description("Get current time")]
+        public string GetCurrentTime()
+        {
+            return DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+
+        [KernelFunction, Description("Get current date")]
+        public string GetCurrentDate()
+        {
+            return DateTime.Now.ToString("yyyy-MM-dd");
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Add plugins to kernel">
+    ```csharp
+    var kernel = Kernel.CreateBuilder()
+        .AddOpenAIChatCompletion("gpt-4", apiKey)
+        .Build();
+
+    // Add plugins
+    kernel.Plugins.AddFromObject(new MathPlugin(), "Math");
+    kernel.Plugins.AddFromObject(new TimePlugin(), "Time");
+    ```
+  </Step>
+
+  <Step title="Create agent with plugins">
+    ```csharp
+    var agent = new SemanticKernelAgent(
+        kernel: kernel,
+        name: "assistant",
+        systemMessage: "You are a helpful assistant with access to math and time functions")
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    // Agent can now use plugins
+    var response = await agent.SendAsync("What is 15 multiplied by 7?");
+    Console.WriteLine(response.GetContent());
+    // The agent will use the Multiply function: "105"
+
+    var timeResponse = await agent.SendAsync("What time is it?");
+    Console.WriteLine(timeResponse.GetContent());
+    // The agent will use GetCurrentTime function
+    ```
+  </Step>
+</Steps>
+
+## Multi-Agent with Semantic Kernel
+
+Combine Semantic Kernel and OpenAI agents:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using AutoGen.SemanticKernel;
+using AutoGen.SemanticKernel.Extension;
+using Microsoft.SemanticKernel;
+using OpenAI;
+
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var model = "gpt-4o-mini";
+
+// Create OpenAI agent
+var openAIClient = new OpenAIClient(apiKey);
+var coder = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient(model),
+    name: "coder",
+    systemMessage: "You are a C# coder. Write code between ```csharp and ```")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+// Create Semantic Kernel agent with plugins
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion(modelId: model, apiKey: apiKey)
+    .Build();
+
+kernel.Plugins.AddFromObject(new MathPlugin(), "Math");
+
+var commenter = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "commenter",
+    systemMessage: "You write inline comments and add unit tests")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+// Create user proxy
+var userProxy = new DefaultReplyAgent("user", defaultReply: "END")
+    .RegisterPrintMessage();
+
+// Create admin for orchestration
+var admin = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient(model),
+    name: "admin")
+    .RegisterMessageConnector();
+
+// Create group chat
+var group = new GroupChat(
+    members: [coder, commenter, userProxy],
+    admin: admin);
+
+// Run conversation
+var workflowInstruction = new TextMessage(
+    Role.User,
+    @"
+    Workflow:
+    User asks question -> Coder writes code ->
+    Commenter adds comments -> User ends
+    ");
+
+var question = new TextMessage(
+    Role.User,
+    "Write a function to calculate the 100th Fibonacci number");
+
+var chatHistory = new List<IMessage> { workflowInstruction, question };
+
+while (true)
+{
+    var replies = await group.CallAsync(chatHistory, maxRound: 1);
+    var lastReply = replies.Last();
+    chatHistory.Add(lastReply);
+
+    if (lastReply.From == userProxy.Name)
+    {
+        break;
+    }
+}
+```
+
+## Azure OpenAI with Semantic Kernel
+
+Use Azure OpenAI in Semantic Kernel:
+
+```csharp
+using Microsoft.SemanticKernel;
+
+var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT");
+var apiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY");
+var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOY_NAME");
+
+var kernel = Kernel.CreateBuilder()
+    .AddAzureOpenAIChatCompletion(
+        deploymentName: deploymentName,
+        endpoint: endpoint,
+        apiKey: apiKey)
+    .Build();
+
+var agent = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "assistant")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+## Using Kernel Functions with AutoGen Agents
+
+Use Semantic Kernel functions with non-SK agents:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using AutoGen.SemanticKernel.Extension;
+using Microsoft.SemanticKernel;
+using Microsoft.Extensions.AI;
+
+// Create kernel with plugins
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion("gpt-4", apiKey)
+    .Build();
+
+kernel.Plugins.AddFromObject(new MathPlugin(), "Math");
+kernel.Plugins.AddFromObject(new TimePlugin(), "Time");
+
+// Convert Kernel functions to AIFunction
+var functions = kernel.Plugins
+    .SelectMany(plugin => plugin)
+    .Select(f => f.AsAIFunction())
+    .ToArray();
+
+// Use with OpenAI agent
+var middleware = new FunctionCallMiddleware(functions);
+
+var openAIAgent = new OpenAIChatAgent(
+    chatClient: openAIClient.GetChatClient("gpt-4"),
+    name: "assistant")
+    .RegisterMessageConnector()
+    .RegisterStreamingMiddleware(middleware)
+    .RegisterPrintMessage();
+
+// Now OpenAI agent can use Semantic Kernel plugins
+var response = await openAIAgent.SendAsync(
+    "Add 25 and 17, then multiply the result by 3");
+```
+
+## Built-in Semantic Kernel Plugins
+
+Use built-in SK plugins:
+
+```csharp
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Plugins.Web;
+using Microsoft.SemanticKernel.Plugins.Web.Bing;
+
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion("gpt-4", apiKey)
+    .Build();
+
+// Add Bing search plugin
+var bingApiKey = Environment.GetEnvironmentVariable("BING_API_KEY");
+var bingConnector = new BingConnector(bingApiKey);
+var webSearchPlugin = new WebSearchEnginePlugin(bingConnector);
+kernel.Plugins.AddFromObject(webSearchPlugin, "WebSearch");
+
+// Create agent with web search capability
+var agent = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "researcher",
+    systemMessage: "You are a research assistant with web search capabilities")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var response = await agent.SendAsync(
+    "Search for the latest news about AI developments");
+```
+
+## Prompt Templates
+
+Use Semantic Kernel prompt templates:
+
+```csharp
+using Microsoft.SemanticKernel;
+using System.ComponentModel;
+
+public class TemplatePlugin
+{
+    [KernelFunction, Description("Generate code review")]
+    public async Task<string> ReviewCode(
+        Kernel kernel,
+        [Description("Code to review")] string code,
+        [Description("Programming language")] string language)
+    {
+        var prompt = $@"
+            Review the following {language} code:
+            
+            ```{language}
+            {code}
+            ```
+            
+            Provide:
+            1. Overall assessment
+            2. Potential bugs
+            3. Improvement suggestions
+            4. Best practices violated
+        ";
+
+        var response = await kernel.InvokePromptAsync(prompt);
+        return response.ToString();
+    }
+}
+
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion("gpt-4", apiKey)
+    .Build();
+
+kernel.Plugins.AddFromObject(new TemplatePlugin(), "Template");
+
+var agent = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "reviewer")
+    .RegisterMessageConnector();
+```
+
+## Memory and Context
+
+Use Semantic Kernel memory:
+
+```csharp
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Memory;
+
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion("gpt-4", apiKey)
+    .Build();
+
+// Note: Memory configuration depends on your SK version
+// and chosen memory store (e.g., volatile, Qdrant, etc.)
+
+var agent = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "assistant",
+    systemMessage: "You are a helpful assistant with memory")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+## Custom Plugins
+
+Create complex plugins:
+
+```csharp
+using Microsoft.SemanticKernel;
+using System.ComponentModel;
+
+public class DataAnalysisPlugin
+{
+    private readonly HttpClient _httpClient;
+
+    public DataAnalysisPlugin(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+    }
+
+    [KernelFunction, Description("Fetch data from API")]
+    public async Task<string> FetchData(
+        [Description("API endpoint")] string endpoint)
+    {
+        var response = await _httpClient.GetStringAsync(endpoint);
+        return response;
+    }
+
+    [KernelFunction, Description("Analyze JSON data")]
+    public string AnalyzeJson(
+        [Description("JSON data")] string json)
+    {
+        // Analysis logic
+        return $"Analysis of {json.Length} characters of JSON data";
+    }
+
+    [KernelFunction, Description("Generate report")]
+    public string GenerateReport(
+        [Description("Analysis results")] string analysis)
+    {
+        return $"Report based on: {analysis}";
+    }
+}
+
+var kernel = Kernel.CreateBuilder()
+    .AddOpenAIChatCompletion("gpt-4", apiKey)
+    .Build();
+
+kernel.Plugins.AddFromObject(
+    new DataAnalysisPlugin(new HttpClient()),
+    "DataAnalysis");
+
+var agent = new SemanticKernelAgent(
+    kernel: kernel,
+    name: "analyst")
+    .RegisterMessageConnector();
+```
+
+## Message Connector
+
+Register the message connector for AutoGen message support:
+
+```csharp
+using AutoGen.SemanticKernel.Extension;
+
+// Required for AutoGen message types
+var agent = new SemanticKernelAgent(/*...*/)
+    .RegisterMessageConnector();
+
+// Now supports:
+// - TextMessage
+// - ImageMessage
+// - ToolCallMessage
+// - ToolCallResultMessage
+// - Aggregate messages
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="When to Use Semantic Kernel">
+    Use `SemanticKernelAgent` when:
+    - You have existing Semantic Kernel code
+    - You need SK-specific plugins (Bing, etc.)
+    - You want SK's memory capabilities
+    - You're using SK prompt templates
+    - You need SK's planning features
+  </Accordion>
+  
+  <Accordion title="Plugin Design">
+    ```csharp
+    // Good: Clear, focused functions
+    public class GoodPlugin
+    {
+        [KernelFunction, Description("Calculate tax")]
+        public decimal CalculateTax(
+            [Description("Amount")] decimal amount,
+            [Description("Tax rate")] decimal rate)
+        {
+            return amount * rate;
+        }
+    }
+
+    // Avoid: Vague or overly complex functions
+    public class AvoidPlugin
+    {
+        [KernelFunction, Description("Do something")]
+        public object DoStuff(string input)
+        {
+            // Too vague
+            return null;
+        }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    ```csharp
+    public class SafePlugin
+    {
+        [KernelFunction]
+        public async Task<string> SafeOperation(string input)
+        {
+            try
+            {
+                // Operation
+                return "Success";
+            }
+            catch (Exception ex)
+            {
+                // Return error as string for LLM to understand
+                return $"Error: {ex.Message}";
+            }
+        }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Reuse `Kernel` instances
+    - Cache plugin results when appropriate
+    - Use async operations for I/O
+    - Limit plugin complexity
+    - Monitor token usage
+  </Accordion>
+</AccordionGroup>
+
+## Semantic Kernel vs AutoGen Functions
+
+<CardGroup cols={2}>
+  <Card title="Semantic Kernel Plugins">
+    **Advantages:**
+    - Rich ecosystem of plugins
+    - Built-in memory and planning
+    - Prompt templates
+    - Enterprise features
+    
+    **Use for:**
+    - Complex orchestration
+    - Multi-step planning
+    - Memory requirements
+    - Existing SK code
+  </Card>
+  
+  <Card title="AutoGen Functions">
+    **Advantages:**
+    - Simpler, lighter weight
+    - Source generator for type safety
+    - Direct control
+    - Better for simple functions
+    
+    **Use for:**
+    - Simple function calling
+    - New projects
+    - Performance-critical code
+    - Minimal dependencies
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Learn about AutoGen's function calling
+  </Card>
+  
+  <Card title="OpenAI Integration" icon="openai" href="/dotnet/openai">
+    Use OpenAI models with AutoGen
+  </Card>
+  
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Create multi-agent workflows
+  </Card>
+  
+  <Card title="Semantic Kernel Docs" icon="book">
+    [Official SK Documentation](https://learn.microsoft.com/semantic-kernel/)
+  </Card>
+</CardGroup>

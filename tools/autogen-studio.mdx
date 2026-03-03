@@ -1,0 +1,309 @@
+---
+title: AutoGen Studio
+description: Rapidly prototype AI agents with a visual interface
+icon: "desktop"
+---
+
+AutoGen Studio is an AutoGen-powered AI application (user interface) to help you rapidly prototype AI agents, enhance them with skills, compose them into workflows, and interact with them to accomplish tasks. It is built on top of the [AutoGen](https://microsoft.github.io/autogen) framework.
+
+<Warning>
+  AutoGen Studio is under active development and is currently not meant to be a production-ready app. Expect breaking changes in upcoming releases.
+</Warning>
+
+## Installation
+
+There are two ways to install AutoGen Studio: from PyPI or from source. We **recommend installing from PyPI** unless you plan to modify the source code.
+
+### Install from PyPI (Recommended)
+
+We recommend using a virtual environment (e.g., venv) to avoid conflicts with existing Python packages. With Python 3.10 or newer active in your virtual environment, use pip to install AutoGen Studio:
+
+<Steps>
+  <Step title="Create a virtual environment">
+    ```bash
+    python -m venv autogen-env
+    source autogen-env/bin/activate  # On Windows: autogen-env\Scripts\activate
+    ```
+  </Step>
+  
+  <Step title="Install AutoGen Studio">
+    ```bash
+    pip install -U autogenstudio
+    ```
+  </Step>
+</Steps>
+
+### Install from Source
+
+<Note>
+  This approach requires familiarity with building interfaces in React and Git LFS.
+</Note>
+
+<Steps>
+  <Step title="Install Git LFS">
+    AutoGen Studio uses Git Large File Storage (LFS) for managing image and other large files.
+    
+    ```bash
+    # On Debian/Ubuntu
+    apt-get install git-lfs
+
+    # On macOS with Homebrew
+    brew install git-lfs
+
+    # On Windows with Chocolatey
+    choco install git-lfs
+    ```
+    
+    Then set up git-lfs:
+    ```bash
+    git lfs install
+    ```
+  </Step>
+  
+  <Step title="Clone and install dependencies">
+    ```bash
+    git clone https://github.com/microsoft/autogen.git
+    cd autogen/python/packages/autogen-studio
+    pip install -e .
+    ```
+  </Step>
+  
+  <Step title="Build the UI">
+    ```bash
+    npm install -g gatsby-cli
+    npm install --global yarn
+    cd frontend
+    yarn install
+    yarn build
+    ```
+    
+    <Note>
+      Windows users may need alternative commands to build the frontend. See the [README](https://github.com/microsoft/autogen/tree/main/python/packages/autogen-studio) for details.
+    </Note>
+  </Step>
+</Steps>
+
+## Running the Application
+
+Once installed, run the web UI by entering the following in your terminal:
+
+```bash
+autogenstudio ui --port 8081
+```
+
+This command will start the application on the specified port. Open your web browser and go to `http://localhost:8081/` to use AutoGen Studio.
+
+### CLI Options
+
+AutoGen Studio accepts several parameters to customize the application:
+
+<ParamField path="--host" type="string" default="localhost">
+  Specify the host address
+</ParamField>
+
+<ParamField path="--port" type="number" default="8080">
+  Specify the port number
+</ParamField>
+
+<ParamField path="--appdir" type="string" default="~/.autogenstudio">
+  Directory where app files (database, generated files) are stored
+</ParamField>
+
+<ParamField path="--database-uri" type="string">
+  Database URI for backend storage. Examples:
+  - SQLite: `sqlite:///database.sqlite`
+  - PostgreSQL: `postgresql+psycopg://user:password@localhost/dbname`
+  
+  If not specified, defaults to `database.sqlite` in the `--appdir` directory.
+</ParamField>
+
+<ParamField path="--reload" type="boolean" default="false">
+  Enable auto-reloading when code changes are made
+</ParamField>
+
+<ParamField path="--upgrade-database" type="boolean" default="false">
+  Upgrade the database schema to the latest version
+</ParamField>
+
+### Example Commands
+
+```bash
+# Run on custom port
+autogenstudio ui --port 8081
+
+# Use PostgreSQL backend
+autogenstudio ui --database-uri postgresql+psycopg://user:password@localhost/dbname
+
+# Specify custom app directory
+autogenstudio ui --appdir /path/to/folder
+
+# Enable development mode with auto-reload
+autogenstudio ui --reload
+```
+
+## AutoGen Studio Lite
+
+AutoGen Studio Lite provides a lightweight way to quickly prototype and experiment with AI agent teams without the full database setup. It's designed for rapid experimentation.
+
+### CLI Usage
+
+Launch Studio Lite from the command line:
+
+```bash
+# Quick start with default team
+autogenstudio lite
+
+# Use custom team file
+autogenstudio lite --team ./my_team.json --port 8080
+
+# Custom session name with auto-open browser
+autogenstudio lite --session-name "My Experiment" --auto-open
+```
+
+### Programmatic Usage
+
+Use Studio Lite directly in your Python code:
+
+```python
+from autogenstudio.lite import LiteStudio
+from autogen_agentchat.teams import RoundRobinGroupChat
+
+# Quick start with default team
+studio = LiteStudio()
+
+# Use with custom AutoGen team objects
+team = RoundRobinGroupChat([agent1, agent2], termination_condition=...)
+
+# Context manager usage
+with LiteStudio(team=team) as studio:
+    # Studio runs in background
+    # Do other work here
+    pass
+```
+
+## Database Configuration
+
+AutoGen Studio uses [SQLModel](https://sqlmodel.tiangolo.com/) (Pydantic + SQLAlchemy) for its database layer. This provides:
+
+- Entity linking (skills, models, agents, and workflows are linked via association tables)
+- Support for multiple database backends via [SQLAlchemy dialects](https://docs.sqlalchemy.org/en/20/dialects/)
+
+### Supported Databases
+
+<CardGroup cols={2}>
+  <Card title="SQLite" icon="database">
+    Default option, file-based database
+    ```bash
+    autogenstudio ui --database-uri sqlite:///database.sqlite
+    ```
+  </Card>
+  
+  <Card title="PostgreSQL" icon="database">
+    Production-ready relational database
+    ```bash
+    autogenstudio ui --database-uri postgresql+psycopg://user:password@localhost/dbname
+    ```
+  </Card>
+  
+  <Card title="MySQL" icon="database">
+    Popular open-source database
+    ```bash
+    autogenstudio ui --database-uri mysql://user:password@localhost/dbname
+    ```
+  </Card>
+  
+  <Card title="Oracle / SQL Server" icon="database">
+    Enterprise database support
+  </Card>
+</CardGroup>
+
+### Environment Variables
+
+Place a `.env` file in your `--appdir` directory to set environment variables for the app. This file will be automatically loaded when the application starts.
+
+```bash .env
+OPENAI_API_KEY=your-api-key-here
+AZURE_API_KEY=your-azure-key-here
+# Add other environment variables as needed
+```
+
+## Project Structure
+
+The AutoGen Studio codebase is organized as follows:
+
+- `autogenstudio/` - Backend classes and web API (FastAPI)
+- `frontend/` - Web UI built with Gatsby and TailwindCSS
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Visual Agent Builder" icon="robot">
+    Define and configure AI agents through an intuitive interface
+  </Card>
+  
+  <Card title="Workflow Composition" icon="diagram-project">
+    Compose multiple agents into workflows to accomplish complex tasks
+  </Card>
+  
+  <Card title="Skills Enhancement" icon="wand-magic-sparkles">
+    Enhance agents with custom skills and capabilities
+  </Card>
+  
+  <Card title="Interactive Sessions" icon="comments">
+    Interact with agents in real-time to test and refine behavior
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Git LFS Issues
+
+If you encounter build errors related to image formats when installing from source:
+
+```bash
+# Install git-lfs if not already installed
+git lfs install
+
+# Fetch all LFS files
+git lfs fetch --all
+
+# Checkout LFS files to working directory
+git lfs checkout
+```
+
+### Database Migration
+
+To upgrade your database schema to the latest version:
+
+```bash
+autogenstudio ui --upgrade-database
+```
+
+## Contributing
+
+We welcome contributions to AutoGen Studio! To contribute:
+
+1. Review the [AutoGen contribution guide](https://github.com/microsoft/autogen?tab=readme-ov-file#contributing)
+2. Check the [roadmap](https://github.com/microsoft/autogen/issues/4006) for current priorities
+3. Use the tag `proj-studio` for issues, questions, and PRs related to Studio
+4. Submit a pull request with your contribution
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/microsoft/autogen/tree/main/python/packages/autogen-studio">
+    View source code and contribute
+  </Card>
+  
+  <Card title="AutoGen Framework" icon="book" href="https://microsoft.github.io/autogen">
+    Learn about the underlying AutoGen framework
+  </Card>
+  
+  <Card title="FAQs" icon="circle-question" href="https://microsoft.github.io/autogen/docs/autogen-studio/faqs">
+    Find answers to common questions
+  </Card>
+  
+  <Card title="PyPI Package" icon="python" href="https://badge.fury.io/py/autogenstudio">
+    View package on PyPI
+  </Card>
+</CardGroup>

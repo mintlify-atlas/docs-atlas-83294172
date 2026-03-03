@@ -1,0 +1,297 @@
+---
+title: Teams
+description: Multi-agent orchestration patterns in AgentChat
+icon: users
+---
+
+Teams orchestrate multiple agents working together to accomplish complex tasks. AgentChat provides several built-in team patterns.
+
+## RoundRobinGroupChat
+
+Agents take turns speaking in a fixed sequence. Simple and predictable.
+
+```python
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+# Create agents
+planner = AssistantAgent(
+    "planner", 
+    model_client=model_client,
+    system_message="You create plans."
+)
+executor = AssistantAgent(
+    "executor",
+    model_client=model_client, 
+    system_message="You execute plans."
+)
+reviewer = AssistantAgent(
+    "reviewer",
+    model_client=model_client,
+    system_message="You review results."
+)
+
+# Create team
+team = RoundRobinGroupChat(
+    participants=[planner, executor, reviewer],
+    termination_condition=MaxMessageTermination(max_messages=10)
+)
+
+# Run the team
+result = await team.run(task="Create a simple web app")
+```
+
+### When to use
+
+- Fixed workflow with clear stages
+- Each agent has a distinct role
+- Order of operations matters
+
+## SelectorGroupChat
+
+An LLM selects the next speaker based on the conversation context.
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.conditions import TextMentionTermination
+
+team = SelectorGroupChat(
+    participants=[researcher, writer, critic],
+    model_client=model_client,  # Model for selecting next speaker
+    selector_prompt="Select the most appropriate agent to speak next.",
+    termination_condition=TextMentionTermination("TERMINATE")
+)
+
+result = await team.run(task="Write a research report on AI")
+```
+
+### Parameters
+
+<ParamField path="participants" type="List[ChatAgent]" required>
+  List of agents in the team
+</ParamField>
+
+<ParamField path="model_client" type="ChatCompletionClient" required>
+  LLM used to select the next speaker
+</ParamField>
+
+<ParamField path="selector_prompt" type="str">
+  Custom prompt for the selector model
+</ParamField>
+
+<ParamField path="allow_repeated_speaker" type="bool" default="False">
+  Whether the same agent can speak twice in a row
+</ParamField>
+
+### When to use
+
+- Dynamic conversations where next speaker depends on context
+- Agents with overlapping capabilities
+- Flexible, adaptive workflows
+
+## Swarm
+
+Agents hand off tasks to each other dynamically using handoff messages.
+
+```python
+from autogen_agentchat.teams import Swarm
+from autogen_agentchat.base import Handoff
+
+# Define handoffs
+triage_agent = AssistantAgent(
+    "triage",
+    model_client=model_client,
+    handoffs=[
+        Handoff(target="sales", message="Transfer to sales"),
+        Handoff(target="support", message="Transfer to support")
+    ]
+)
+
+sales_agent = AssistantAgent("sales", model_client=model_client)
+support_agent = AssistantAgent("support", model_client=model_client)
+
+team = Swarm(
+    participants=[triage_agent, sales_agent, support_agent],
+    termination_condition=TextMentionTermination("RESOLVED")
+)
+
+result = await team.run(task="I need help with my account")
+```
+
+### When to use
+
+- Customer service and triage scenarios
+- Specialized agents for different domains
+- Dynamic routing based on task content
+
+## MagenticOneGroupChat
+
+A powerful multi-agent team designed for complex web and file-based tasks.
+
+```python
+from autogen_agentchat.teams import MagenticOneGroupChat
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+team = MagenticOneGroupChat(
+    model_client=model_client
+)
+
+result = await team.run(
+    task="Research the latest AI papers and create a summary"
+)
+```
+
+MagenticOne includes specialized agents:
+- **Orchestrator** - Coordinates the team
+- **WebSurfer** - Browses the web
+- **FileSurfer** - Reads and analyzes files
+- **Coder** - Writes and reviews code
+- **ComputerTerminal** - Executes commands
+
+See [Magentic-One documentation](/tools/magentic-one) for details.
+
+## GraphFlow
+
+Define custom orchestration logic using a directed graph.
+
+```python
+from autogen_agentchat.teams import GraphFlow, DiGraphBuilder
+
+# Build a graph
+builder = DiGraphBuilder()
+builder.add_node("start", planner)
+builder.add_node("execute", executor)
+builder.add_node("review", reviewer)
+
+# Define transitions
+builder.add_edge("start", "execute")
+builder.add_edge("execute", "review")
+
+# Conditional edge based on review result
+def route_from_review(state) -> str:
+    last_message = state.messages[-1]
+    if "approved" in last_message.content.lower():
+        return "end"
+    return "execute"  # Re-execute if not approved
+
+builder.add_conditional_edge("review", route_from_review)
+
+graph = builder.build()
+team = GraphFlow(graph=graph, initial_state="start")
+
+result = await team.run(task="Build a feature")
+```
+
+### When to use
+
+- Complex workflows with conditional logic
+- Loops and retries
+- Multiple exit conditions
+- Fine-grained control over flow
+
+See [Graph Orchestration example](/examples/graph-orchestration) for a complete example.
+
+## Termination conditions
+
+All teams require a termination condition to know when to stop:
+
+```python
+from autogen_agentchat.conditions import (
+    MaxMessageTermination,
+    TextMentionTermination,
+    TokenUsageTermination,
+    TimeoutTermination,
+    AndTerminationCondition,
+    OrTerminationCondition
+)
+
+# Stop after 20 messages
+max_msg = MaxMessageTermination(max_messages=20)
+
+# Stop when "TERMINATE" appears
+text_term = TextMentionTermination("TERMINATE")
+
+# Stop after 10000 tokens
+token_term = TokenUsageTermination(max_total_token=10000)
+
+# Stop after 5 minutes
+timeout = TimeoutTermination(timeout_seconds=300)
+
+# Combine conditions (stop if ANY condition is met)
+combined = OrTerminationCondition([max_msg, text_term])
+```
+
+## Team comparison
+
+| Team Type | Routing | Use Case |
+|-----------|---------|----------|
+| RoundRobinGroupChat | Fixed sequence | Sequential workflows |
+| SelectorGroupChat | LLM selects | Dynamic conversations |
+| Swarm | Agent handoffs | Triage and routing |
+| MagenticOneGroupChat | Orchestrator + specialists | Complex web/file tasks |
+| GraphFlow | Custom graph | Complex conditional logic |
+
+## Nested teams
+
+You can nest teams using `SocietyOfMindAgent`:
+
+```python
+from autogen_agentchat.agents import SocietyOfMindAgent
+
+# Create inner team
+inner_team = RoundRobinGroupChat([agent1, agent2])
+
+# Wrap as single agent
+team_agent = SocietyOfMindAgent(
+    name="inner_team",
+    team=inner_team
+)
+
+# Use in outer team
+outer_team = SelectorGroupChat(
+    participants=[team_agent, other_agent]
+)
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Keep teams focused">
+    Each team should have a clear purpose. Don't create overly complex teams with too many agents.
+  </Accordion>
+  
+  <Accordion title="Set appropriate termination conditions">
+    Always set termination conditions to prevent infinite loops. Combine conditions for safety.
+  </Accordion>
+  
+  <Accordion title="Use clear agent descriptions">
+    Agent descriptions help LLM-based selectors choose the right agent. Be specific.
+  </Accordion>
+  
+  <Accordion title="Monitor token usage">
+    Multi-agent conversations can use many tokens. Use `TokenUsageTermination` to control costs.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Multi-Agent Workflows" icon="diagram-project" href="/guides/multi-agent-workflows">
+    Learn to design effective multi-agent systems
+  </Card>
+  <Card title="Swarm Example" icon="code" href="/examples/swarm-pattern">
+    See Swarm pattern in action
+  </Card>
+  <Card title="Graph Orchestration" icon="code" href="/examples/graph-orchestration">
+    Build custom graph-based workflows
+  </Card>
+  <Card title="Orchestration Patterns" icon="sitemap" href="/agentchat/orchestration-patterns">
+    Explore advanced patterns
+  </Card>
+</CardGroup>

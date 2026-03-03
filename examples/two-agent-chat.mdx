@@ -1,0 +1,167 @@
+---
+title: Two Agent Chat
+description: Create a conversation between two agents using AutoGen
+---
+
+This example demonstrates how to create a multi-agent system where two agents communicate with each other.
+
+## What You'll Learn
+
+- How to create multiple agents with different roles
+- How to use AgentTool to wrap agents as tools
+- How to orchestrate agent-to-agent communication
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]"
+    ```
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## Code Example
+
+This example creates two expert agents (math and chemistry) that can be consulted by a main assistant:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.tools import AgentTool
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Create a math expert agent
+    math_agent = AssistantAgent(
+        "math_expert",
+        model_client=model_client,
+        system_message="You are a math expert.",
+        description="A math expert assistant.",
+        model_client_stream=True,
+    )
+    math_agent_tool = AgentTool(math_agent, return_value_as_last_message=True)
+
+    # Create a chemistry expert agent
+    chemistry_agent = AssistantAgent(
+        "chemistry_expert",
+        model_client=model_client,
+        system_message="You are a chemistry expert.",
+        description="A chemistry expert assistant.",
+        model_client_stream=True,
+    )
+    chemistry_agent_tool = AgentTool(chemistry_agent, return_value_as_last_message=True)
+
+    # Create main assistant with access to expert tools
+    agent = AssistantAgent(
+        "assistant",
+        system_message="You are a general assistant. Use expert tools when needed.",
+        model_client=model_client,
+        model_client_stream=True,
+        tools=[math_agent_tool, chemistry_agent_tool],
+        max_tool_iterations=10,
+    )
+    
+    # Ask math question
+    await Console(agent.run_stream(task="What is the integral of x^2?"))
+    
+    # Ask chemistry question
+    await Console(agent.run_stream(task="What is the molecular weight of water?"))
+    
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python two_agent_chat.py
+```
+
+## Expected Output
+
+For the math question:
+
+```
+---------- assistant ----------
+[Calling math_expert...]
+---------- math_expert ----------
+The integral of x^2 is (x^3)/3 + C, where C is the constant of integration.
+---------- assistant ----------
+The integral of x^2 is (x^3)/3 + C
+```
+
+For the chemistry question:
+
+```
+---------- assistant ----------
+[Calling chemistry_expert...]
+---------- chemistry_expert ----------
+The molecular weight of water (H2O) is approximately 18.015 g/mol.
+---------- assistant ----------
+The molecular weight of water is 18.015 g/mol
+```
+
+## How It Works
+
+1. **Specialized Agents**: Creates two expert agents with specific system messages
+2. **AgentTool**: Wraps each expert agent as a tool that can be called by the main assistant
+3. **Tool Selection**: The main assistant automatically determines which expert to consult
+4. **Streaming**: Uses streaming for real-time output display
+
+## Key Concepts
+
+<CardGroup cols={2}>
+  <Card title="AgentTool" icon="wrench">
+    Wraps an agent as a tool that can be called by another agent.
+  </Card>
+  
+  <Card title="System Message" icon="message">
+    Defines the agent's role, personality, and capabilities.
+  </Card>
+  
+  <Card title="Tool Selection" icon="robot">
+    The LLM automatically decides which tool/agent to use based on the task.
+  </Card>
+  
+  <Card title="Streaming" icon="stream">
+    Display responses in real-time as they're generated.
+  </Card>
+</CardGroup>
+
+## Configuration Options
+
+### AgentTool Parameters
+
+- `return_value_as_last_message`: Returns only the final message from the agent (cleaner output)
+- `description`: Helps the calling agent understand when to use this tool
+
+### AssistantAgent Parameters
+
+- `system_message`: Defines the agent's persona and instructions
+- `model_client_stream`: Enables streaming responses
+- `max_tool_iterations`: Maximum number of tool calls allowed
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tool Calling" icon="wrench" href="/examples/tool-calling">
+    Learn how to add custom tools to agents
+  </Card>
+  
+  <Card title="Swarm Pattern" icon="network-wired" href="/examples/swarm-pattern">
+    Implement more complex multi-agent orchestration
+  </Card>
+</CardGroup>

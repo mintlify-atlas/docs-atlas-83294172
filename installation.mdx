@@ -1,0 +1,592 @@
+---
+title: Installation
+description: Complete guide to installing AutoGen for Python and .NET
+---
+
+# Installation
+
+AutoGen is available for both Python and .NET. This guide covers installation for both platforms, prerequisites, and verification steps.
+
+## Python Installation
+
+AutoGen requires **Python 3.10 or later**.
+
+### Prerequisites
+
+<Steps>
+  <Step title="Check Python version">
+    Verify you have Python 3.10 or later:
+    
+    ```bash
+    python --version
+    # or
+    python3 --version
+    ```
+    
+    If you need to upgrade, download from [python.org](https://www.python.org/downloads/).
+  </Step>
+
+  <Step title="Create a virtual environment (recommended)">
+    Using a virtual environment keeps AutoGen dependencies isolated:
+    
+    <Tabs>
+      <Tab title="venv">
+        <CodeGroup>
+        ```bash Linux/Mac
+        python3 -m venv .venv
+        source .venv/bin/activate
+        ```
+        
+        ```batch Windows (CMD)
+        python -m venv .venv
+        .venv\Scripts\activate.bat
+        ```
+        
+        ```powershell Windows (PowerShell)
+        python -m venv .venv
+        .venv\Scripts\Activate.ps1
+        ```
+        </CodeGroup>
+        
+        To deactivate later:
+        ```bash
+        deactivate
+        ```
+      </Tab>
+      
+      <Tab title="conda">
+        If you prefer conda, first [install Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html).
+        
+        ```bash
+        conda create -n autogen python=3.12
+        conda activate autogen
+        ```
+        
+        To deactivate later:
+        ```bash
+        conda deactivate
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+### Core Packages
+
+AutoGen has three main packages that can be installed separately or together:
+
+<CardGroup cols={3}>
+  <Card title="autogen-core" icon="cube">
+    Event-driven foundation with agent runtime, message passing, and distributed execution.
+  </Card>
+  <Card title="autogen-agentchat" icon="comments">
+    High-level API with preset agents and team patterns. Built on `autogen-core`.
+  </Card>
+  <Card title="autogen-ext" icon="puzzle-piece">
+    Extensions for model clients, tools, and integrations.
+  </Card>
+</CardGroup>
+
+### Installation Options
+
+<Tabs>
+  <Tab title="Recommended: AgentChat + Extensions">
+    For most users, install AgentChat with model client extensions:
+    
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]"
+    ```
+    
+    This installs:
+    - `autogen-core` (dependency)
+    - `autogen-agentchat` for high-level agents and teams
+    - `autogen-ext[openai]` for OpenAI/Azure OpenAI support
+  </Tab>
+  
+  <Tab title="Core API Only">
+    For advanced users who want event-driven control:
+    
+    ```bash
+    pip install -U "autogen-core"
+    ```
+    
+    You'll likely also want extensions:
+    
+    ```bash
+    pip install -U "autogen-ext[openai]"
+    ```
+  </Tab>
+  
+  <Tab title="Studio (No-Code GUI)">
+    Install AutoGen Studio for visual workflow building:
+    
+    ```bash
+    pip install -U "autogenstudio"
+    ```
+    
+    Launch the UI:
+    
+    ```bash
+    autogenstudio ui --port 8080
+    ```
+    
+    Then open [http://localhost:8080](http://localhost:8080) in your browser.
+  </Tab>
+</Tabs>
+
+### Extension Options
+
+The `autogen-ext` package supports many optional dependencies. Install only what you need:
+
+<Tabs>
+  <Tab title="Model Clients">
+    ```bash
+    # OpenAI and Azure OpenAI
+    pip install "autogen-ext[openai]"
+    
+    # Azure with AAD authentication
+    pip install "autogen-ext[azure]"
+    
+    # Anthropic Claude
+    pip install "autogen-ext[anthropic]"
+    
+    # Google Gemini
+    pip install "autogen-ext[gemini]"
+    
+    # Local models via Ollama
+    pip install "autogen-ext[ollama]"
+    
+    # llama.cpp support
+    pip install "autogen-ext[llama-cpp]"
+    ```
+  </Tab>
+  
+  <Tab title="Tools & Capabilities">
+    ```bash
+    # Code execution in Docker
+    pip install "autogen-ext[docker]"
+    
+    # Jupyter kernel code execution
+    pip install "autogen-ext[jupyter-executor]"
+    
+    # MCP server integration
+    pip install "autogen-ext[mcp]"
+    
+    # Web browsing capabilities
+    pip install "autogen-ext[web-surfer]"
+    
+    # File handling tools
+    pip install "autogen-ext[file-surfer]"
+    ```
+  </Tab>
+  
+  <Tab title="Memory & Storage">
+    ```bash
+    # ChromaDB vector store
+    pip install "autogen-ext[chromadb]"
+    
+    # Redis caching
+    pip install "autogen-ext[redis]"
+    
+    # DiskCache
+    pip install "autogen-ext[diskcache]"
+    
+    # Mem0 memory system
+    pip install "autogen-ext[mem0]"
+    ```
+  </Tab>
+  
+  <Tab title="Advanced">
+    ```bash
+    # gRPC for distributed runtime
+    pip install "autogen-ext[grpc]"
+    
+    # GraphRAG integration
+    pip install "autogen-ext[graphrag]"
+    
+    # LangChain integration
+    pip install "autogen-ext[langchain]"
+    
+    # Semantic Kernel
+    pip install "autogen-ext[semantic-kernel-core]"
+    
+    # Rich terminal output
+    pip install "autogen-ext[rich]"
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  You can combine multiple extensions: `pip install "autogen-ext[openai,docker,chromadb]"`
+</Info>
+
+### Verify Python Installation
+
+Test that packages are installed correctly:
+
+```python
+import autogen_core
+import autogen_agentchat
+import autogen_ext.models.openai
+
+print(f"autogen-core: {autogen_core.__version__}")
+print(f"autogen-agentchat: {autogen_agentchat.__version__}")
+print(f"autogen-ext: {autogen_ext.__version__}")
+print("\nAutoGen installed successfully!")
+```
+
+<Note>
+  Latest stable version: **0.7.5** (check [releases](https://github.com/microsoft/autogen/releases) for updates)
+</Note>
+
+## .NET Installation
+
+AutoGen for .NET supports both the legacy AutoGen.* packages and the new Microsoft.AutoGen.* packages.
+
+### Prerequisites
+
+<Steps>
+  <Step title="Install .NET SDK">
+    Download and install [.NET 8.0 SDK or later](https://dotnet.microsoft.com/download).
+    
+    Verify installation:
+    ```bash
+    dotnet --version
+    ```
+  </Step>
+
+  <Step title="Create a new project">
+    ```bash
+    dotnet new console -n MyAutoGenApp
+    cd MyAutoGenApp
+    ```
+  </Step>
+</Steps>
+
+### Package Options
+
+<Warning>
+  AutoGen for .NET has two package families:
+  - **Microsoft.AutoGen.*** (new, event-driven model) - Recommended
+  - **AutoGen.*** (legacy, v0.2 style) - Being gradually deprecated
+  
+  This guide focuses on the new packages.
+</Warning>
+
+<Tabs>
+  <Tab title="Microsoft.AutoGen (Recommended)">
+    The new event-driven packages:
+    
+    ```bash
+    # Core contracts and types
+    dotnet add package Microsoft.AutoGen.Contracts
+    
+    # Agent runtime
+    dotnet add package Microsoft.AutoGen.Core
+    
+    # gRPC support for distributed runtime
+    dotnet add package Microsoft.AutoGen.Core.Grpc
+    
+    # Runtime gateway
+    dotnet add package Microsoft.AutoGen.RuntimeGateway.Grpc
+    ```
+    
+    See [.NET Core documentation](https://microsoft.github.io/autogen/dotnet/dev/core/index.html) for usage.
+  </Tab>
+  
+  <Tab title="AutoGen (Legacy)">
+    The older packages for AutoGen v0.2 style:
+    
+    ```bash
+    # Core abstractions
+    dotnet add package AutoGen.Core
+    
+    # OpenAI integration
+    dotnet add package AutoGen.OpenAI
+    
+    # Source generators for type-safe functions
+    dotnet add package AutoGen.SourceGenerator
+    ```
+    
+    <Note>
+      These packages will continue to receive bug fixes and security patches but new features go to Microsoft.AutoGen.*
+    </Note>
+  </Tab>
+</Tabs>
+
+### Sample .NET Code
+
+Here's a simple agent using the legacy packages:
+
+```csharp
+using AutoGen;
+using AutoGen.OpenAI;
+
+var openAIKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
+    ?? throw new Exception("Please set OPENAI_API_KEY");
+
+var gpt35Config = new OpenAIConfig(openAIKey, "gpt-3.5-turbo");
+
+var assistantAgent = new AssistantAgent(
+    name: "assistant",
+    systemMessage: "You are a helpful AI assistant.",
+    llmConfig: new ConversableAgentConfig
+    {
+        Temperature = 0,
+        ConfigList = new[] { gpt35Config },
+    })
+    .RegisterPrintMessage();
+
+var userProxyAgent = new UserProxyAgent(
+    name: "user",
+    humanInputMode: HumanInputMode.ALWAYS)
+    .RegisterPrintMessage();
+
+await userProxyAgent.InitiateChatAsync(
+    receiver: assistantAgent,
+    message: "Hello, assistant!",
+    maxRound: 10);
+```
+
+### Verify .NET Installation
+
+Run your project:
+
+```bash
+dotnet run
+```
+
+For more examples, see the [.NET samples](https://github.com/microsoft/autogen/tree/main/dotnet/samples).
+
+## Development Installation
+
+If you want to contribute to AutoGen or use the latest unreleased features:
+
+<Tabs>
+  <Tab title="From Source (Python)">
+    ```bash
+    git clone https://github.com/microsoft/autogen.git
+    cd autogen/python
+    
+    # Install in development mode
+    pip install -e packages/autogen-core
+    pip install -e packages/autogen-agentchat
+    pip install -e "packages/autogen-ext[openai]"
+    ```
+  </Tab>
+  
+  <Tab title="Nightly Builds (.NET)">
+    Add the nightly feed to your NuGet sources:
+    
+    ```bash
+    dotnet nuget add source https://pkgs.dev.azure.com/AGPublish/AGPublic/_packaging/AutoGen-Nightly/nuget/v3/index.json \
+      --name AutoGen-Nightly
+    ```
+    
+    Then install packages from this feed:
+    
+    ```bash
+    dotnet add package Microsoft.AutoGen.Core --prerelease
+    ```
+  </Tab>
+</Tabs>
+
+## Platform-Specific Notes
+
+<AccordionGroup>
+  <Accordion title="Windows">
+    **PowerShell Execution Policy**
+    
+    If you can't activate virtual environments, run:
+    ```powershell
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    ```
+    
+    **Long Path Support**
+    
+    Enable long paths to avoid installation issues:
+    ```powershell
+    # Run as Administrator
+    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+    ```
+  </Accordion>
+
+  <Accordion title="macOS">
+    **Python Installation**
+    
+    Use Homebrew for the latest Python:
+    ```bash
+    brew install python@3.12
+    ```
+    
+    **M1/M2/M3 Macs**
+    
+    Some extensions may require Rosetta for x86 dependencies:
+    ```bash
+    softwareupdate --install-rosetta
+    ```
+  </Accordion>
+
+  <Accordion title="Linux">
+    **System Dependencies**
+    
+    Some extensions need system packages:
+    
+    Ubuntu/Debian:
+    ```bash
+    sudo apt-get update
+    sudo apt-get install -y python3-dev build-essential
+    ```
+    
+    CentOS/RHEL:
+    ```bash
+    sudo yum install python3-devel gcc
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="pip install fails with 'No matching distribution'">
+    This usually means your Python version is too old. AutoGen requires Python 3.10+:
+    
+    ```bash
+    python --version
+    ```
+    
+    Upgrade Python if needed, or use `python3.10`, `python3.11`, or `python3.12` explicitly:
+    
+    ```bash
+    python3.11 -m pip install autogen-agentchat
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    On Linux/Mac, you might need `--user` flag:
+    
+    ```bash
+    pip install --user autogen-agentchat
+    ```
+    
+    Or use a virtual environment (recommended).
+  </Accordion>
+
+  <Accordion title="SSL certificate errors">
+    Update certificates:
+    
+    ```bash
+    pip install --upgrade certifi
+    ```
+    
+    Or temporarily bypass (not recommended for production):
+    
+    ```bash
+    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org autogen-agentchat
+    ```
+  </Accordion>
+
+  <Accordion title="Import errors after installation">
+    Make sure you're using the correct Python environment:
+    
+    ```bash
+    which python  # Linux/Mac
+    where python  # Windows
+    ```
+    
+    If using a virtual environment, ensure it's activated.
+  </Accordion>
+
+  <Accordion title="Version conflicts">
+    AutoGen has specific version requirements. If you get conflicts:
+    
+    ```bash
+    # Create a fresh environment
+    python -m venv fresh_venv
+    source fresh_venv/bin/activate  # or activate.bat on Windows
+    pip install autogen-agentchat
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Upgrading AutoGen
+
+<Tabs>
+  <Tab title="Python">
+    Update to the latest version:
+    
+    ```bash
+    pip install --upgrade autogen-agentchat autogen-ext
+    ```
+    
+    Check installed version:
+    
+    ```bash
+    pip show autogen-agentchat
+    ```
+  </Tab>
+  
+  <Tab title=".NET">
+    Update packages:
+    
+    ```bash
+    dotnet add package Microsoft.AutoGen.Core
+    ```
+    
+    Or update all packages:
+    
+    ```bash
+    dotnet restore --force
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  **Migrating from AutoGen v0.2?** The new version has breaking changes. See the [Migration Guide](/migration-guide) for detailed upgrade instructions.
+</Warning>
+
+## Next Steps
+
+Now that AutoGen is installed:
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Build your first agent in 5 minutes
+  </Card>
+  <Card
+    title="Core Concepts"
+    icon="book"
+    href="/concepts"
+  >
+    Learn about agents, teams, and tools
+  </Card>
+  <Card
+    title="Model Configuration"
+    icon="brain"
+    href="/agentchat/models"
+  >
+    Set up OpenAI, Azure, or other providers
+  </Card>
+  <Card
+    title="Examples"
+    icon="code"
+    href="/examples/overview"
+  >
+    Explore sample applications
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- **Python Package Index**: [pypi.org/project/autogen-agentchat](https://pypi.org/project/autogen-agentchat/)
+- **.NET NuGet Gallery**: [nuget.org/packages/Microsoft.AutoGen.Core](https://www.nuget.org/packages/Microsoft.AutoGen.Core/)
+- **GitHub Repository**: [github.com/microsoft/autogen](https://github.com/microsoft/autogen)
+- **Release Notes**: [GitHub Releases](https://github.com/microsoft/autogen/releases)
+
+<Info>
+  Having installation issues? Ask for help on [GitHub Discussions](https://github.com/microsoft/autogen/discussions) or [Discord](https://aka.ms/autogen-discord).
+</Info>

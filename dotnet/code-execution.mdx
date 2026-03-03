@@ -1,0 +1,536 @@
+---
+title: 'Code Execution'
+description: 'Execute C#, F#, Python, and PowerShell code with dotnet-interactive'
+---
+
+## Overview
+
+AutoGen for .NET integrates with [dotnet-interactive](https://github.com/dotnet/interactive) to execute code snippets dynamically. This enables agents to:
+
+- Run C# and F# code
+- Execute Python scripts (with Python kernel)
+- Run PowerShell commands
+- Access execution results
+- Handle compilation and runtime errors
+
+## Installation
+
+Install the AutoGen.DotnetInteractive package:
+
+```bash
+dotnet add package AutoGen.DotnetInteractive
+```
+
+For Python support, also add the dotnet-tools feed:
+
+```bash
+dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json --name dotnet-tools
+```
+
+## Basic C# Execution
+
+<Steps>
+  <Step title="Create a kernel">
+    ```csharp
+    using AutoGen.Core;
+    using AutoGen.DotnetInteractive;
+    using AutoGen.DotnetInteractive.Extension;
+
+    var kernel = DotnetInteractiveKernelBuilder
+        .CreateDefaultInProcessKernelBuilder()
+        .Build();
+    ```
+  </Step>
+
+  <Step title="Execute code">
+    ```csharp
+    var code = @"
+    Console.WriteLine(""Hello from C#!"");
+    var sum = 1 + 2;
+    Console.WriteLine($""Sum: {sum}"");
+    ";
+
+    var result = await kernel.RunSubmitCodeCommandAsync(code, "csharp");
+    Console.WriteLine(result);
+    // Output:
+    // Hello from C#!
+    // Sum: 3
+    ```
+  </Step>
+</Steps>
+
+## Agent with Code Execution
+
+Create an agent that can execute code snippets:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.DotnetInteractive;
+using AutoGen.DotnetInteractive.Extension;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+
+public class CodeExecutionExample
+{
+    public static async Task RunAsync()
+    {
+        var kernel = DotnetInteractiveKernelBuilder
+            .CreateDefaultInProcessKernelBuilder()
+            .Build();
+
+        var coder = new OpenAIChatAgent(
+            chatClient: GetOpenAIClient(),
+            name: "coder",
+            systemMessage: @"
+                You are a C# coding assistant.
+                When writing code, put it between ```csharp and ```
+            ")
+            .RegisterMessageConnector()
+            .RegisterPrintMessage();
+
+        // Add code execution middleware
+        var codeAgent = coder.RegisterMiddleware(
+            async (messages, options, innerAgent, ct) =>
+            {
+                var lastMessage = messages.LastOrDefault();
+                if (lastMessage?.GetContent() is string content)
+                {
+                    // Extract code block
+                    var codeBlock = lastMessage.ExtractCodeBlock(
+                        "```csharp",
+                        "```");
+
+                    if (codeBlock != null)
+                    {
+                        // Execute the code
+                        var result = await kernel.RunSubmitCodeCommandAsync(
+                            codeBlock,
+                            "csharp");
+
+                        return new TextMessage(
+                            Role.Assistant,
+                            result,
+                            from: coder.Name);
+                    }
+                }
+
+                return await innerAgent.GenerateReplyAsync(messages, options, ct);
+            });
+
+        // Use the agent
+        var response = await codeAgent.SendAsync(@"
+            Write C# code to calculate the first 10 Fibonacci numbers
+        ");
+
+        Console.WriteLine(response.GetContent());
+    }
+}
+```
+
+## Supported Languages
+
+### C# (Default)
+
+```csharp
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder() // Includes C#
+    .Build();
+
+var csharpCode = @"
+using System;
+using System.Linq;
+
+var numbers = Enumerable.Range(1, 10);
+var sum = numbers.Sum();
+Console.WriteLine($""Sum: {sum}"");
+";
+
+var result = await kernel.RunSubmitCodeCommandAsync(csharpCode, "csharp");
+```
+
+### F#
+
+```csharp
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder() // Includes F#
+    .Build();
+
+var fsharpCode = @"
+let numbers = [1..10]
+let sum = List.sum numbers
+printfn ""Sum: %d"" sum
+";
+
+var result = await kernel.RunSubmitCodeCommandAsync(fsharpCode, "fsharp");
+```
+
+### PowerShell
+
+```csharp
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder()
+    .AddPowershellKernel()
+    .Build();
+
+var powershellCode = @"
+$numbers = 1..10
+$sum = ($numbers | Measure-Object -Sum).Sum
+Write-Host ""Sum: $sum""
+";
+
+var result = await kernel.RunSubmitCodeCommandAsync(
+    powershellCode,
+    "pwsh");
+```
+
+### Python
+
+```csharp
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder()
+    .AddPythonKernel(venv: "python3") // Requires Python installed
+    .Build();
+
+var pythonCode = @"
+numbers = list(range(1, 11))
+total = sum(numbers)
+print(f'Sum: {total}')
+";
+
+var result = await kernel.RunSubmitCodeCommandAsync(
+    pythonCode,
+    "python3");
+```
+
+<Note>
+Python support requires Python to be installed on the system.
+</Note>
+
+## Code Extraction
+
+Extract code blocks from markdown:
+
+```csharp
+using AutoGen.DotnetInteractive.Extension;
+
+var message = new TextMessage(Role.Assistant, 
+    "Some message with code content");
+
+// Extract code blocks from message content
+var code = message.ExtractCodeBlock("csharp", "");
+
+if (code != null)
+{
+    Console.WriteLine("Found code");
+    Console.WriteLine(code);
+}
+```
+
+## Complete Example: Code Assistant
+
+Full example with multiple languages:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.DotnetInteractive;
+using AutoGen.DotnetInteractive.Extension;
+using AutoGen.OpenAI;
+using AutoGen.OpenAI.Extension;
+using OpenAI;
+
+public class MultiLanguageCodeAssistant
+{
+    public static async Task RunAsync()
+    {
+        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var openAIClient = new OpenAIClient(apiKey);
+
+        // Create kernel with multiple language support
+        var kernel = DotnetInteractiveKernelBuilder
+            .CreateDefaultInProcessKernelBuilder() // C# and F#
+            .AddPythonKernel(venv: "python3")      // Python
+            .AddPowershellKernel()                  // PowerShell
+            .Build();
+
+        // Create coding agent
+        var coder = new OpenAIChatAgent(
+            chatClient: openAIClient.GetChatClient("gpt-4"),
+            name: "coder",
+            systemMessage: @"
+                You are a multi-language coding assistant.
+                Support C#, F#, Python, and PowerShell.
+                Wrap code in appropriate markdown blocks:
+                - ```csharp for C#
+                - ```fsharp for F#
+                - ```python for Python
+                - ```powershell for PowerShell
+            ")
+            .RegisterMessageConnector()
+            .RegisterPrintMessage();
+
+        // Add code execution middleware
+        var executor = coder.RegisterMiddleware(
+            async (messages, options, innerAgent, ct) =>
+            {
+                var lastMessage = messages.LastOrDefault();
+                if (lastMessage?.GetContent() is not string content)
+                {
+                    return await innerAgent.GenerateReplyAsync(
+                        messages, options, ct);
+                }
+
+                // Try to extract and execute code for each language
+                var languages = new[]
+                {
+                    ("```csharp", "csharp"),
+                    ("```fsharp", "fsharp"),
+                    ("```python", "python3"),
+                    ("```powershell", "pwsh")
+                };
+
+                foreach (var (marker, kernel_name) in languages)
+                {
+                    var code = lastMessage.ExtractCodeBlock(marker, "```");
+                    if (code != null)
+                    {
+                        try
+                        {
+                            var result = await kernel.RunSubmitCodeCommandAsync(
+                                code,
+                                kernel_name);
+
+                            return new TextMessage(
+                                Role.Assistant,
+                                $"Execution result:\n{result}",
+                                from: coder.Name);
+                        }
+                        catch (Exception ex)
+                        {
+                            return new TextMessage(
+                                Role.Assistant,
+                                $"Execution error: {ex.Message}",
+                                from: coder.Name);
+                        }
+                    }
+                }
+
+                // No code found, generate reply normally
+                return await innerAgent.GenerateReplyAsync(
+                    messages, options, ct);
+            });
+
+        // Test with different languages
+        Console.WriteLine("=== C# Example ===");
+        await executor.SendAsync(
+            "Write C# code to calculate factorial of 5");
+
+        Console.WriteLine("\n=== Python Example ===");
+        await executor.SendAsync(
+            "Write Python code to create a list of squares from 1 to 5");
+
+        Console.WriteLine("\n=== F# Example ===");
+        await executor.SendAsync(
+            "Write F# code to filter even numbers from 1 to 10");
+    }
+}
+```
+
+## Error Handling
+
+Handle compilation and runtime errors:
+
+```csharp
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder()
+    .Build();
+
+var buggyCode = @"
+int x = 10;
+int y = 0;
+int result = x / y; // Division by zero
+Console.WriteLine(result);
+";
+
+try
+{
+    var result = await kernel.RunSubmitCodeCommandAsync(
+        buggyCode,
+        "csharp");
+    Console.WriteLine(result);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Error executing code: {ex.Message}");
+    // Handle error appropriately
+}
+```
+
+## State Preservation
+
+The kernel maintains state across executions:
+
+```csharp
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder()
+    .Build();
+
+// First execution: define variable
+await kernel.RunSubmitCodeCommandAsync(
+    "var greeting = \"Hello\";",
+    "csharp");
+
+// Second execution: use the variable
+var result = await kernel.RunSubmitCodeCommandAsync(
+    "Console.WriteLine(greeting + \" World!\");",
+    "csharp");
+
+Console.WriteLine(result);
+// Output: Hello World!
+```
+
+## Advanced: Custom Kernel Configuration
+
+```csharp
+using Microsoft.DotNet.Interactive;
+using Microsoft.DotNet.Interactive.Commands;
+using Microsoft.DotNet.Interactive.CSharp;
+
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder()
+    .Build();
+
+// Add custom using statements
+await kernel.SendAsync(
+    new SubmitCode("using System.Text.Json;", "csharp"));
+
+// Add NuGet packages
+await kernel.SendAsync(
+    new SubmitCode(
+        "#r \"nuget: Newtonsoft.Json, 13.0.3\"",
+        "csharp"));
+
+// Now use the package
+var code = @"
+using Newtonsoft.Json;
+var obj = new { Name = "John", Age = 30 };
+var json = JsonConvert.SerializeObject(obj);
+Console.WriteLine(json);
+";
+
+var result = await kernel.RunSubmitCodeCommandAsync(code, "csharp");
+Console.WriteLine(result);
+// Output: {"Name":"John","Age":30}
+```
+
+## Integration with Group Chat
+
+Code execution in multi-agent scenarios:
+
+```csharp
+var kernel = DotnetInteractiveKernelBuilder
+    .CreateDefaultInProcessKernelBuilder()
+    .Build();
+
+var coder = new OpenAIChatAgent(/*...*/)
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var executor = new DefaultReplyAgent(
+    name: "executor",
+    defaultReply: "Code executed")
+    .RegisterMiddleware(async (messages, options, agent, ct) =>
+    {
+        var lastMessage = messages.LastOrDefault();
+        var code = lastMessage?.ExtractCodeBlock("```csharp", "```");
+        
+        if (code != null)
+        {
+            var result = await kernel.RunSubmitCodeCommandAsync(
+                code, "csharp");
+            return new TextMessage(
+                Role.Assistant,
+                $"Execution result:\n{result}",
+                from: "executor");
+        }
+        
+        return await agent.GenerateReplyAsync(messages, options, ct);
+    })
+    .RegisterPrintMessage();
+
+var reviewer = new OpenAIChatAgent(/*...*/)
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var group = new GroupChat(
+    members: [coder, executor, reviewer],
+    admin: adminAgent);
+
+var result = await group.CallAsync(
+    new[] { new TextMessage(Role.User, "Write code to sort an array") },
+    maxRound: 10);
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Security">
+    - Validate and sanitize code before execution
+    - Run in isolated environments for untrusted code
+    - Implement timeouts to prevent infinite loops
+    - Limit resource usage (memory, CPU)
+    - Never execute code with elevated privileges
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Reuse kernel instances when possible
+    - Clear kernel state periodically if needed
+    - Consider compilation caching for repeated code
+    - Monitor memory usage for long-running kernels
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    ```csharp
+    try
+    {
+        var result = await kernel.RunSubmitCodeCommandAsync(
+            code, language);
+        return new TextMessage(
+            Role.Assistant,
+            $"Success:\n{result}");
+    }
+    catch (Exception ex)
+    {
+        return new TextMessage(
+            Role.Assistant,
+            $"Error: {ex.Message}\nPlease fix the code.");
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Code Extraction">
+    - Always validate extracted code is non-null
+    - Support multiple code block formats
+    - Handle mixed language documents
+    - Preserve indentation and formatting
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Combine code execution with function calls
+  </Card>
+  
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Use code execution in multi-agent workflows
+  </Card>
+  
+  <Card title="Agents" icon="robot" href="/dotnet/agents">
+    Learn more about agent capabilities
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples">
+    See complete code execution examples
+  </Card>
+</CardGroup>

@@ -1,0 +1,201 @@
+---
+title: Tool Calling
+description: Give your agents the ability to use tools and functions
+---
+
+This example shows how to equip agents with custom tools that extend their capabilities beyond text generation.
+
+## What You'll Learn
+
+- How to create custom tool functions
+- How to register tools with agents
+- How agents automatically decide when to use tools
+- How to handle tool results
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install AutoGen">
+    ```bash
+    pip install -U "autogen-agentchat" "autogen-ext[openai]"
+    ```
+  </Step>
+  
+  <Step title="Set your OpenAI API key">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+</Steps>
+
+## Code Example
+
+Create a weather assistant that can fetch weather data:
+
+```python
+import asyncio
+from typing import Annotated
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+# Define a custom tool
+def get_weather(
+    location: Annotated[str, "The city name, e.g., 'San Francisco'"],
+) -> str:
+    """Get the current weather for a location."""
+    # In a real application, this would call a weather API
+    return f"The weather in {location} is sunny with a temperature of 72°F."
+
+
+def get_forecast(
+    location: Annotated[str, "The city name"],
+    days: Annotated[int, "Number of days for forecast"] = 3,
+) -> str:
+    """Get weather forecast for multiple days."""
+    return f"{days}-day forecast for {location}: Sunny, Cloudy, Rainy"
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+
+    # Create agent with tools
+    agent = AssistantAgent(
+        "weather_assistant",
+        model_client=model_client,
+        system_message="You are a helpful weather assistant. Use the tools to provide accurate weather information.",
+        tools=[get_weather, get_forecast],
+        model_client_stream=True,
+    )
+
+    # Test the agent
+    await Console(
+        agent.run_stream(task="What's the weather like in San Francisco?")
+    )
+    
+    await Console(
+        agent.run_stream(task="Can you give me a 5-day forecast for Seattle?")
+    )
+
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Run the Example
+
+```bash
+python tool_calling.py
+```
+
+## Expected Output
+
+```
+---------- weather_assistant ----------
+[Calling get_weather(location='San Francisco')...]
+[Tool result: The weather in San Francisco is sunny with a temperature of 72°F.]
+The weather in San Francisco is currently sunny with a temperature of 72°F.
+
+---------- weather_assistant ----------
+[Calling get_forecast(location='Seattle', days=5)...]
+[Tool result: 5-day forecast for Seattle: Sunny, Cloudy, Rainy]
+Here's the 5-day forecast for Seattle: Sunny, Cloudy, Rainy
+```
+
+## How It Works
+
+1. **Tool Definition**: Functions are defined with type hints and docstrings
+2. **Registration**: Tools are passed to the agent via the `tools` parameter
+3. **Automatic Selection**: The LLM decides when and which tools to use based on the task
+4. **Execution**: The agent calls the tool, receives the result, and incorporates it into the response
+
+## Tool Requirements
+
+### Function Signature
+
+```python
+def tool_name(
+    param1: Annotated[type, "description"],
+    param2: Annotated[type, "description"] = default_value,
+) -> str:
+    """Tool description that helps the LLM understand when to use it."""
+    # Implementation
+    return result
+```
+
+### Key Requirements
+
+- **Type Hints**: All parameters must have type annotations
+- **Annotated**: Use `Annotated` to provide parameter descriptions
+- **Docstring**: Required - helps the LLM understand the tool's purpose
+- **Return Type**: Should return a string or serializable type
+
+## Advanced Tool Example
+
+Here's a more complex tool that performs calculations:
+
+```python
+import math
+from typing import Annotated
+
+def calculate(
+    expression: Annotated[str, "Mathematical expression to evaluate, e.g., '2 + 2' or 'sqrt(16)'"]
+) -> str:
+    """Evaluate a mathematical expression safely."""
+    try:
+        # Safe evaluation with limited scope
+        allowed_names = {
+            'sqrt': math.sqrt,
+            'pow': math.pow,
+            'sin': math.sin,
+            'cos': math.cos,
+            'pi': math.pi,
+            'e': math.e,
+        }
+        result = eval(expression, {"__builtins__": {}}, allowed_names)
+        return f"Result: {result}"
+    except Exception as e:
+        return f"Error evaluating expression: {str(e)}"
+```
+
+## Key Concepts
+
+<CardGroup cols={2}>
+  <Card title="Tool Function" icon="wrench">
+    A Python function that extends agent capabilities with specific actions.
+  </Card>
+  
+  <Card title="Annotated Types" icon="tag">
+    Provides parameter descriptions to help the LLM use tools correctly.
+  </Card>
+  
+  <Card title="Docstrings" icon="book">
+    Explains the tool's purpose so the LLM knows when to use it.
+  </Card>
+  
+  <Card title="Tool Selection" icon="magic">
+    The LLM automatically decides which tool to use based on context.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+1. **Clear Descriptions**: Write detailed docstrings and parameter descriptions
+2. **Error Handling**: Always handle errors gracefully and return meaningful messages
+3. **Type Safety**: Use proper type hints to prevent runtime errors
+4. **Tool Limits**: Set `max_tool_iterations` to prevent infinite loops
+5. **Security**: Validate inputs and avoid executing arbitrary code
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Web Browsing" icon="globe" href="/examples/web-browsing">
+    Use MCP servers to add web browsing capabilities
+  </Card>
+  
+  <Card title="Code Execution" icon="code" href="/examples/code-execution">
+    Execute Python code safely in agent workflows
+  </Card>
+</CardGroup>

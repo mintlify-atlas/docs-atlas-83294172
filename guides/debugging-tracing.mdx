@@ -1,0 +1,580 @@
+---
+title: Debugging and Tracing Agents
+description: Learn how to debug, trace, and monitor AutoGen agents and multi-agent workflows
+---
+
+# Debugging and Tracing Agents
+
+Effective debugging is crucial for developing reliable multi-agent applications. AutoGen provides comprehensive logging, tracing, and debugging capabilities.
+
+## Logging Configuration
+
+AutoGen uses Python's built-in `logging` module with specialized loggers.
+
+### Basic Logging Setup
+
+```python
+import logging
+from autogen_agentchat import EVENT_LOGGER_NAME, TRACE_LOGGER_NAME
+
+# Configure root logger
+logging.basicConfig(level=logging.WARNING)
+
+# Enable trace logging (detailed execution flow)
+trace_logger = logging.getLogger(TRACE_LOGGER_NAME)
+trace_logger.addHandler(logging.StreamHandler())
+trace_logger.setLevel(logging.DEBUG)
+
+# Enable event logging (structured messages)
+event_logger = logging.getLogger(EVENT_LOGGER_NAME)
+event_logger.addHandler(logging.FileHandler("events.log"))
+event_logger.setLevel(logging.DEBUG)
+```
+
+### Log Levels
+
+```python
+import logging
+
+# DEBUG: Detailed information for debugging
+logging.DEBUG
+
+# INFO: General informational messages
+logging.INFO
+
+# WARNING: Warning messages (default level)
+logging.WARNING
+
+# ERROR: Error messages
+logging.ERROR
+
+# CRITICAL: Critical errors
+logging.CRITICAL
+```
+
+## Trace Logging
+
+Trace logging provides detailed execution flow:
+
+```python
+import asyncio
+import logging
+from autogen_agentchat import TRACE_LOGGER_NAME
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+# Enable trace logging
+trace_logger = logging.getLogger(TRACE_LOGGER_NAME)
+trace_logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setFormatter(
+    logging.Formatter('[%(levelname)s] %(name)s: %(message)s')
+)
+trace_logger.addHandler(handler)
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    agent = AssistantAgent(
+        "assistant",
+        model_client=model_client,
+        system_message="You are a helpful assistant."
+    )
+    
+    # Trace logs will show:
+    # - Message processing
+    # - Model calls
+    # - Tool executions
+    # - State changes
+    result = await agent.run(task="What is 2+2?")
+    print(result.messages[-1].content)
+    
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+## Event Logging
+
+Event logging captures structured events:
+
+```python
+import logging
+from autogen_agentchat import EVENT_LOGGER_NAME
+
+# Enable event logging
+event_logger = logging.getLogger(EVENT_LOGGER_NAME)
+event_logger.setLevel(logging.DEBUG)
+
+# Log to file for analysis
+file_handler = logging.FileHandler("agent_events.log")
+file_handler.setFormatter(
+    logging.Formatter('%(asctime)s - %(message)s')
+)
+event_logger.addHandler(file_handler)
+
+# Now run agents - events are logged automatically
+```
+
+## Logging Model Client Calls
+
+Trace all LLM API calls:
+
+```python
+import logging
+
+# Enable OpenAI client logging
+logging.getLogger("autogen_ext.models.openai").setLevel(logging.DEBUG)
+logging.getLogger("autogen_core.models").setLevel(logging.DEBUG)
+
+# Shows:
+# - Request payloads
+# - Response data
+# - Token usage
+# - Latency
+```
+
+## Streaming with Logging
+
+Combine streaming output with logging:
+
+```python
+import asyncio
+import logging
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.messages import TextMessage
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_core import CancellationToken
+
+# Setup logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    agent = AssistantAgent(
+        "assistant",
+        model_client=model_client,
+        model_client_stream=True  # Enable streaming
+    )
+    
+    # Stream with automatic logging
+    async for message in agent.on_messages_stream(
+        [TextMessage(content="Write a haiku about debugging", source="user")],
+        CancellationToken()
+    ):
+        print(message)
+    
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+## Debugging Teams
+
+Debug multi-agent team execution:
+
+```python
+import logging
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+from autogen_agentchat import TRACE_LOGGER_NAME, EVENT_LOGGER_NAME
+
+# Comprehensive logging for teams
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    handlers=[
+        logging.FileHandler('team_debug.log'),
+        logging.StreamHandler()
+    ]
+)
+
+# Enable all AutoGen loggers
+logging.getLogger(TRACE_LOGGER_NAME).setLevel(logging.DEBUG)
+logging.getLogger(EVENT_LOGGER_NAME).setLevel(logging.DEBUG)
+logging.getLogger("autogen_core").setLevel(logging.DEBUG)
+logging.getLogger("autogen_agentchat").setLevel(logging.DEBUG)
+
+async def main():
+    # Create team
+    team = RoundRobinGroupChat(
+        [agent1, agent2],
+        termination_condition=MaxMessageTermination(10)
+    )
+    
+    # Logs show:
+    # - Speaker selection
+    # - Message routing
+    # - Termination checks
+    # - State updates
+    result = await team.run(task="Collaborate on a task")
+```
+
+## Inspecting Messages
+
+Examine message history during execution:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.messages import TextMessage
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    agent = AssistantAgent(
+        "assistant",
+        model_client=model_client
+    )
+    
+    result = await agent.run(task="Explain recursion")
+    
+    # Inspect all messages
+    print(f"\nTotal messages: {len(result.messages)}")
+    for i, msg in enumerate(result.messages):
+        print(f"\n--- Message {i} ---")
+        print(f"Type: {type(msg).__name__}")
+        print(f"Source: {msg.source}")
+        if hasattr(msg, 'content'):
+            print(f"Content: {msg.content[:100]}...")  # First 100 chars
+        if hasattr(msg, 'models_usage'):
+            print(f"Token usage: {msg.models_usage}")
+    
+    await model_client.close()
+
+asyncio.run(main())
+```
+
+## State Inspection
+
+Inspect and debug agent state:
+
+```python
+import json
+
+async def debug_agent_state():
+    # Create and use agent
+    agent = AssistantAgent("assistant", model_client=model_client)
+    await agent.run(task="First task")
+    
+    # Save state for inspection
+    state = await agent.save_state()
+    
+    # Pretty print state
+    print(json.dumps(state, indent=2))
+    
+    # Inspect specific fields
+    if 'message_history' in state:
+        print(f"\nMessage count: {len(state['message_history'])}")
+    
+    # Write to file for detailed analysis
+    with open("agent_state_debug.json", "w") as f:
+        json.dump(state, f, indent=2)
+```
+
+## Tool Call Debugging
+
+Debug tool execution:
+
+```python
+import logging
+from autogen_core import trace_tool_span
+
+# Enable tool tracing
+logging.getLogger("autogen_core.tools").setLevel(logging.DEBUG)
+
+def debug_tool(param: str) -> str:
+    """A tool with debug logging."""
+    logger = logging.getLogger(__name__)
+    
+    logger.debug(f"Tool called with param: {param}")
+    
+    try:
+        result = perform_operation(param)
+        logger.debug(f"Tool result: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Tool failed: {e}", exc_info=True)
+        return f"Error: {e}"
+
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    tools=[debug_tool]
+)
+```
+
+## Error Handling and Logging
+
+Capture and log errors:
+
+```python
+import asyncio
+import logging
+from autogen_agentchat.agents import AssistantAgent
+
+logger = logging.getLogger(__name__)
+
+async def robust_agent_execution():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    agent = AssistantAgent("assistant", model_client=model_client)
+    
+    try:
+        result = await agent.run(task="Your task")
+        logger.info("Agent completed successfully")
+        return result
+        
+    except asyncio.TimeoutError:
+        logger.error("Agent execution timed out")
+        raise
+        
+    except Exception as e:
+        logger.error(f"Agent execution failed: {e}", exc_info=True)
+        # Log full stack trace
+        raise
+        
+    finally:
+        await model_client.close()
+        logger.debug("Resources cleaned up")
+```
+
+## Custom Logging Handlers
+
+Create custom handlers for specialized logging:
+
+```python
+import logging
+import json
+from datetime import datetime
+
+class StructuredLogHandler(logging.Handler):
+    """Custom handler for structured JSON logs."""
+    
+    def __init__(self, filename):
+        super().__init__()
+        self.file = open(filename, 'a')
+    
+    def emit(self, record):
+        log_entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+        }
+        self.file.write(json.dumps(log_entry) + '\n')
+        self.file.flush()
+    
+    def close(self):
+        self.file.close()
+        super().close()
+
+# Use custom handler
+trace_logger = logging.getLogger(TRACE_LOGGER_NAME)
+handler = StructuredLogHandler('structured_logs.jsonl')
+trace_logger.addHandler(handler)
+```
+
+## Performance Profiling
+
+Profile agent execution:
+
+```python
+import asyncio
+import time
+import logging
+from functools import wraps
+
+logger = logging.getLogger(__name__)
+
+def profile_async(func):
+    """Decorator to profile async functions."""
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        start_time = time.time()
+        logger.info(f"Starting {func.__name__}")
+        
+        try:
+            result = await func(*args, **kwargs)
+            elapsed = time.time() - start_time
+            logger.info(f"Completed {func.__name__} in {elapsed:.2f}s")
+            return result
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"Failed {func.__name__} after {elapsed:.2f}s: {e}")
+            raise
+    
+    return wrapper
+
+@profile_async
+async def run_agent_task():
+    agent = AssistantAgent("assistant", model_client=model_client)
+    return await agent.run(task="Complex task")
+```
+
+## Message Flow Visualization
+
+Visualize message flow in teams:
+
+```python
+import asyncio
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.base import TaskResult
+
+def visualize_message_flow(result: TaskResult):
+    """Print a visual representation of message flow."""
+    print("\n=== Message Flow ===")
+    for i, msg in enumerate(result.messages):
+        indent = "  " * (i % 3)  # Simple indentation
+        print(f"{indent}[{i}] {msg.source}:")
+        if hasattr(msg, 'content'):
+            content = msg.content[:50]  # Truncate
+            print(f"{indent}    {content}...")
+        print()
+
+async def main():
+    team = RoundRobinGroupChat([agent1, agent2], termination_condition=...)
+    result = await team.run(task="Task")
+    visualize_message_flow(result)
+```
+
+## Debugging Common Issues
+
+### Agent Not Responding
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Check:
+# 1. Model client configuration
+print(f"Model: {model_client._model}")
+
+# 2. System message
+print(f"System message: {agent._system_message}")
+
+# 3. Message history
+state = await agent.save_state()
+print(f"Message count: {len(state.get('message_history', []))}")
+```
+
+### Tool Not Being Called
+
+```python
+# Verify tool registration
+print(f"Agent tools: {[t.schema.name for t in agent._tools]}")
+
+# Check tool descriptions
+for tool in agent._tools:
+    print(f"Tool: {tool.schema.name}")
+    print(f"Description: {tool.schema.description}")
+    print()
+
+# Enable tool logging
+logging.getLogger("autogen_core.tools").setLevel(logging.DEBUG)
+```
+
+### Team Not Terminating
+
+```python
+# Check termination condition
+print(f"Termination: {team._termination_condition}")
+
+# Add safety limit
+from autogen_agentchat.conditions import MaxMessageTermination
+termination = existing_condition | MaxMessageTermination(50)
+```
+
+## Best Practices
+
+<Steps>
+
+### Use Appropriate Log Levels
+
+```python
+# Development
+logging.DEBUG  # See everything
+
+# Production
+logging.INFO   # Important events only
+logging.WARNING  # Problems and above
+```
+
+### Log to Files
+
+```python
+handler = logging.FileHandler('app.log')
+handler.setLevel(logging.DEBUG)
+logger.addHandler(handler)
+```
+
+### Structured Logging
+
+Use structured formats (JSON) for log analysis:
+
+```python
+import logging
+import json
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps({
+            'timestamp': record.created,
+            'level': record.levelname,
+            'message': record.getMessage(),
+            'name': record.name
+        })
+```
+
+### Rotate Logs
+
+Preventing unbounded log growth:
+
+```python
+from logging.handlers import RotatingFileHandler
+
+handler = RotatingFileHandler(
+    'agent.log',
+    maxBytes=10_000_000,  # 10MB
+    backupCount=5
+)
+```
+
+</Steps>
+
+<Note>
+Excessive debug logging can impact performance. Use appropriate log levels in production.
+</Note>
+
+## Advanced: OpenTelemetry Integration
+
+Integrate with OpenTelemetry for distributed tracing:
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+
+# Setup OpenTelemetry
+trace.set_tracer_provider(TracerProvider())
+tracer = trace.get_tracer(__name__)
+trace.get_tracer_provider().add_span_processor(
+    SimpleSpanProcessor(ConsoleSpanExporter())
+)
+
+# Trace agent execution
+async def traced_agent_run():
+    with tracer.start_as_current_span("agent_execution"):
+        result = await agent.run(task="Task")
+        return result
+```
+
+## Related Resources
+
+- [Custom Agents](/guides/custom-agents) - Debug custom agent implementations
+- [Multi-Agent Workflows](/guides/multi-agent-workflows) - Debug team patterns
+- [Tool Integration](/guides/tool-integration) - Debug tool execution

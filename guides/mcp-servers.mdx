@@ -1,0 +1,558 @@
+---
+title: Using MCP Servers with Agents
+description: Connect AutoGen agents to Model Context Protocol (MCP) servers for extended tool capabilities
+---
+
+# Using MCP Servers with Agents
+
+The Model Context Protocol (MCP) provides a standardized way to connect AI agents to external tools and data sources. AutoGen supports MCP servers through the `McpWorkbench` class.
+
+<Warning>
+Only connect to trusted MCP servers. Servers can execute commands in your local environment and access sensitive information.
+</Warning>
+
+## Quick Start with Playwright MCP
+
+Create a web browsing assistant using the Playwright MCP server:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+
+async def main() -> None:
+    # First install: npm install -g @playwright/mcp@latest
+    
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Configure MCP server connection
+    server_params = StdioServerParams(
+        command="npx",
+        args=[
+            "@playwright/mcp@latest",
+            "--headless",
+        ],
+    )
+    
+    # Connect to MCP server
+    async with McpWorkbench(server_params) as mcp:
+        agent = AssistantAgent(
+            "web_browsing_assistant",
+            model_client=model_client,
+            workbench=mcp,  # Connect MCP tools to agent
+            model_client_stream=True,
+            max_tool_iterations=10,
+        )
+        
+        await Console(
+            agent.run_stream(
+                task="Find out how many contributors the microsoft/autogen repository has"
+            )
+        )
+    
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## McpWorkbench Overview
+
+The `McpWorkbench` class wraps MCP servers and provides:
+
+- **Tools**: List and call server-provided tools
+- **Resources**: Access server resources
+- **Prompts**: Use server-defined prompts
+- **Automatic Integration**: Tools automatically available to agents
+
+## Connection Types
+
+### Stdio Connection
+
+Connect to MCP servers running as child processes:
+
+```python
+from autogen_ext.tools.mcp import StdioServerParams
+
+# Node.js based server
+server_params = StdioServerParams(
+    command="npx",
+    args=["@modelcontextprotocol/server-fetch@latest"],
+    read_timeout_seconds=60,
+)
+
+# Python based server
+server_params = StdioServerParams(
+    command="uvx",
+    args=["mcp-server-fetch"],
+    read_timeout_seconds=60,
+)
+
+# With environment variables
+server_params = StdioServerParams(
+    command="docker",
+    args=["run", "-i", "--rm", "mcp-server-image"],
+    env={
+        "API_KEY": "your-api-key",
+        "DEBUG": "true"
+    }
+)
+```
+
+### SSE Connection
+
+Connect to MCP servers over HTTP with Server-Sent Events:
+
+```python
+from autogen_ext.tools.mcp import SseServerParams
+
+server_params = SseServerParams(
+    url="http://localhost:8000/mcp/sse",
+    headers={
+        "Authorization": "Bearer your-token"
+    }
+)
+```
+
+## Using Multiple MCP Servers
+
+Connect agents to multiple MCP servers simultaneously:
+
+```python
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Web browsing server
+    playwright_params = StdioServerParams(
+        command="npx",
+        args=["@playwright/mcp@latest", "--headless"],
+    )
+    
+    # File system server
+    filesystem_params = StdioServerParams(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+    )
+    
+    # Connect to both servers
+    async with McpWorkbench(playwright_params) as mcp1, \
+               McpWorkbench(filesystem_params) as mcp2:
+        
+        agent = AssistantAgent(
+            "multi_tool_assistant",
+            model_client=model_client,
+            workbench=[mcp1, mcp2],  # Pass list of workbenches
+            model_client_stream=True,
+            max_tool_iterations=15,
+        )
+        
+        await Console(
+            agent.run_stream(
+                task="Browse microsoft.com and save the title to /tmp/title.txt"
+            )
+        )
+```
+
+## GitHub MCP Server Example
+
+Connect to the GitHub MCP server:
+
+```python
+import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Configure GitHub MCP server via Docker
+    server_params = StdioServerParams(
+        command="docker",
+        args=[
+            "run",
+            "-i",
+            "--rm",
+            "-e",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+            "ghcr.io/github/github-mcp-server",
+        ],
+        env={
+            "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_YOUR_TOKEN_HERE",
+        },
+    )
+    
+    async with McpWorkbench(server_params) as mcp:
+        agent = AssistantAgent(
+            "github_assistant",
+            model_client=model_client,
+            workbench=mcp,
+            reflect_on_tool_use=True,
+            model_client_stream=True,
+        )
+        
+        await Console(
+            agent.run_stream(
+                task="List the most recent issues in the microsoft/autogen repository"
+            )
+        )
+    
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+## Tool Overrides
+
+Customize how MCP tools appear to agents:
+
+```python
+from autogen_core.tools import ToolOverride
+from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
+
+server_params = StdioServerParams(
+    command="uvx",
+    args=["mcp-server-fetch"],
+)
+
+# Override tool names and descriptions
+overrides = {
+    "fetch": ToolOverride(
+        name="web_fetch",
+        description="Enhanced web fetching with better error handling and retry logic"
+    )
+}
+
+async with McpWorkbench(server_params, tool_overrides=overrides) as mcp:
+    # Tool now appears as "web_fetch" to the agent
+    tools = await mcp.list_tools()
+    print(tools)  # Shows "web_fetch" instead of "fetch"
+```
+
+## Listing Available Tools
+
+Query MCP servers for available tools:
+
+```python
+async def explore_mcp_server():
+    server_params = StdioServerParams(
+        command="npx",
+        args=["@playwright/mcp@latest"],
+    )
+    
+    async with McpWorkbench(server_params) as mcp:
+        # List all available tools
+        tools = await mcp.list_tools()
+        for tool in tools:
+            print(f"Tool: {tool['name']}")
+            print(f"Description: {tool['description']}")
+            print(f"Parameters: {tool['parameters']}")
+            print()
+```
+
+## Calling Tools Directly
+
+Call MCP tools without agents:
+
+```python
+async def call_mcp_tool_directly():
+    server_params = StdioServerParams(
+        command="uvx",
+        args=["mcp-server-fetch"],
+    )
+    
+    async with McpWorkbench(server_params) as mcp:
+        # List available tools
+        tools = await mcp.list_tools()
+        
+        # Call a tool directly
+        result = await mcp.call_tool(
+            "fetch",
+            {"url": "https://example.com"}
+        )
+        print(result)
+```
+
+## Working with Resources
+
+Access MCP server resources:
+
+```python
+async def access_mcp_resources():
+    server_params = StdioServerParams(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "/data"],
+    )
+    
+    async with McpWorkbench(server_params) as mcp:
+        # List available resources
+        resources = await mcp.list_resources()
+        for resource in resources:
+            print(f"Resource: {resource['name']}")
+        
+        # Read a specific resource
+        content = await mcp.read_resource("file:///data/config.json")
+        print(content)
+```
+
+## MCP with Multi-Agent Teams
+
+Use MCP servers in multi-agent workflows:
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+
+async def main():
+    model_client = OpenAIChatCompletionClient(model="gpt-4o")
+    
+    # Web browsing MCP
+    playwright_params = StdioServerParams(
+        command="npx",
+        args=["@playwright/mcp@latest", "--headless"],
+    )
+    
+    # File system MCP
+    fs_params = StdioServerParams(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "./workspace"],
+    )
+    
+    async with McpWorkbench(playwright_params) as web_mcp, \
+               McpWorkbench(fs_params) as fs_mcp:
+        
+        # Agent for web research
+        researcher = AssistantAgent(
+            "researcher",
+            description="Browses web for information",
+            model_client=model_client,
+            workbench=web_mcp,
+            reflect_on_tool_use=True
+        )
+        
+        # Agent for file operations
+        writer = AssistantAgent(
+            "writer",
+            description="Saves data to files",
+            model_client=model_client,
+            workbench=fs_mcp,
+            reflect_on_tool_use=True
+        )
+        
+        team = SelectorGroupChat(
+            [researcher, writer],
+            model_client=model_client,
+            termination_condition=MaxMessageTermination(15)
+        )
+        
+        await Console(
+            team.run_stream(
+                task="Research Python best practices and save summary to report.txt"
+            )
+        )
+```
+
+## Error Handling
+
+Handle MCP connection and execution errors:
+
+```python
+import asyncio
+
+async def robust_mcp_usage():
+    server_params = StdioServerParams(
+        command="npx",
+        args=["@playwright/mcp@latest"],
+    )
+    
+    try:
+        async with McpWorkbench(server_params) as mcp:
+            agent = AssistantAgent(
+                "assistant",
+                model_client=model_client,
+                workbench=mcp
+            )
+            
+            result = await agent.run(task="Your task")
+            
+    except TimeoutError:
+        print("MCP server connection timed out")
+    except ConnectionError:
+        print("Failed to connect to MCP server")
+    except Exception as e:
+        print(f"Error: {e}")
+```
+
+## Timeout Configuration
+
+Configure timeouts for MCP operations:
+
+```python
+server_params = StdioServerParams(
+    command="npx",
+    args=["@playwright/mcp@latest"],
+    read_timeout_seconds=120,  # Wait up to 2 minutes for responses
+)
+
+async with McpWorkbench(server_params) as mcp:
+    # Long-running operations supported
+    pass
+```
+
+## Best Practices
+
+<Steps>
+
+### Security First
+
+Only use trusted MCP servers:
+
+```python
+# ✅ Good: Official servers
+StdioServerParams(command="npx", args=["@playwright/mcp@latest"])
+
+# ⚠️  Caution: Third-party servers - verify source
+StdioServerParams(command="npx", args=["unknown-mcp-server"])
+
+# 🚫 Dangerous: Untrusted code execution
+StdioServerParams(command="bash", args=["-c", "user_input"])
+```
+
+### Use Context Managers
+
+Always use `async with` for proper cleanup:
+
+```python
+# ✅ Good: Automatic cleanup
+async with McpWorkbench(params) as mcp:
+    await use_mcp(mcp)
+
+# ❌ Bad: Manual management (error-prone)
+mcp = McpWorkbench(params)
+await mcp.start()
+try:
+    await use_mcp(mcp)
+finally:
+    await mcp.stop()
+```
+
+### Handle Long Operations
+
+MCP tools can be slow - set appropriate limits:
+
+```python
+agent = AssistantAgent(
+    "assistant",
+    model_client=model_client,
+    workbench=mcp,
+    max_tool_iterations=10,  # Prevent infinite loops
+)
+```
+
+### Monitor Resource Usage
+
+Some MCP servers (like browsers) consume significant resources:
+
+```python
+# Limit browser instances
+server_params = StdioServerParams(
+    command="npx",
+    args=["@playwright/mcp@latest", "--headless", "--max-pages=5"],
+)
+```
+
+</Steps>
+
+<Note>
+MCP servers run as separate processes. Ensure they're properly closed to avoid resource leaks.
+</Note>
+
+## Available MCP Servers
+
+Popular MCP servers you can use:
+
+### Official Servers
+
+- **@playwright/mcp** - Web browsing and automation
+- **@modelcontextprotocol/server-fetch** - HTTP requests
+- **@modelcontextprotocol/server-filesystem** - File system access
+- **@modelcontextprotocol/server-sqlite** - SQLite database access
+- **github-mcp-server** - GitHub API integration
+
+### Installation Examples
+
+```bash
+# Playwright (Node.js)
+npm install -g @playwright/mcp@latest
+
+# Fetch server (Python)
+uvx mcp-server-fetch
+
+# GitHub server (Docker)
+docker pull ghcr.io/github/github-mcp-server
+```
+
+## Debugging MCP Connections
+
+Debug MCP server issues:
+
+```python
+import logging
+
+# Enable detailed logging
+logging.basicConfig(level=logging.DEBUG)
+
+async def debug_mcp():
+    server_params = StdioServerParams(
+        command="npx",
+        args=["@playwright/mcp@latest"],
+    )
+    
+    try:
+        async with McpWorkbench(server_params) as mcp:
+            # List tools to verify connection
+            tools = await mcp.list_tools()
+            print(f"Connected successfully. Available tools: {len(tools)}")
+            for tool in tools:
+                print(f"  - {tool['name']}")
+    except Exception as e:
+        print(f"Connection failed: {e}")
+        import traceback
+        traceback.print_exc()
+```
+
+## Advanced: Custom MCP Host
+
+Implement custom MCP capabilities:
+
+```python
+from autogen_ext.tools.mcp import McpWorkbench, McpSessionHost
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+class CustomMcpHost(McpSessionHost):
+    """Custom MCP host with specialized handling."""
+    
+    async def handle_sampling_request(self, request):
+        # Custom sampling logic
+        pass
+
+# Use custom host
+host = CustomMcpHost(model_client=OpenAIChatCompletionClient(model="gpt-4o"))
+
+async with McpWorkbench(server_params, host=host) as mcp:
+    # MCP server can now use custom capabilities
+    pass
+```
+
+## Related Resources
+
+- [Tool Integration](/guides/tool-integration) - Learn about standard tool integration
+- [Custom Agents](/guides/custom-agents) - Build agents with custom MCP handling
+- [Multi-Agent Workflows](/guides/multi-agent-workflows) - Use MCP in team patterns
+- [MCP Specification](https://modelcontextprotocol.io/) - Official MCP documentation

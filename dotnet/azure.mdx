@@ -1,0 +1,646 @@
+---
+title: 'Azure AI Inference'
+description: 'Use AutoGen with Azure AI Inference and GitHub Models'
+---
+
+## Overview
+
+The `AutoGen.AzureAIInference` package integrates with Azure AI Inference API, providing access to:
+
+- Models deployed on Azure AI Studio
+- GitHub Models marketplace
+- Azure OpenAI Service
+- Various model providers through a unified interface
+
+## Installation
+
+```bash
+dotnet add package AutoGen.AzureAIInference
+```
+
+## Azure AI Studio Setup
+
+<Steps>
+  <Step title="Deploy a model">
+    Deploy a model in [Azure AI Studio](https://ai.azure.com/) and obtain:
+    - Endpoint URL
+    - API Key
+    - Model name
+  </Step>
+
+  <Step title="Set environment variables">
+    <CodeGroup>
+    ```bash Windows (PowerShell)
+    $env:AZURE_AI_ENDPOINT="https://your-endpoint.inference.ai.azure.com"
+    $env:AZURE_AI_API_KEY="your-api-key"
+    ```
+    
+    ```bash macOS/Linux
+    export AZURE_AI_ENDPOINT="https://your-endpoint.inference.ai.azure.com"
+    export AZURE_AI_API_KEY="your-api-key"
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Create an agent">
+    ```csharp
+    using AutoGen.AzureAIInference;
+    using AutoGen.AzureAIInference.Extension;
+    using Azure.AI.Inference;
+    using Azure.Core;
+
+    var endpoint = Environment.GetEnvironmentVariable("AZURE_AI_ENDPOINT");
+    var apiKey = Environment.GetEnvironmentVariable("AZURE_AI_API_KEY");
+    var modelName = "gpt-4"; // Your deployed model
+
+    var client = new ChatCompletionsClient(
+        new Uri(endpoint),
+        new AzureKeyCredential(apiKey));
+
+    var agent = new ChatCompletionsClientAgent(
+        chatCompletionsClient: client,
+        name: "assistant",
+        modelName: modelName,
+        systemMessage: "You are a helpful AI assistant")
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    var response = await agent.SendAsync("Hello!");
+    ```
+  </Step>
+</Steps>
+
+## GitHub Models
+
+Use models from GitHub Models marketplace:
+
+<Steps>
+  <Step title="Get GitHub token">
+    Create a personal access token from [GitHub Settings](https://github.com/settings/tokens) with appropriate scopes.
+  </Step>
+
+  <Step title="Set environment variable">
+    <CodeGroup>
+    ```bash Windows (PowerShell)
+    $env:GITHUB_TOKEN="ghp_your_token_here"
+    ```
+    
+    ```bash macOS/Linux
+    export GITHUB_TOKEN="ghp_your_token_here"
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Create agent with GitHub Models">
+    ```csharp
+    using AutoGen.AzureAIInference;
+    using AutoGen.AzureAIInference.Extension;
+    using Azure.AI.Inference;
+    using Azure.Core;
+
+    var githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+    var endpoint = "https://models.inference.ai.azure.com";
+    var modelName = "gpt-4o-mini"; // Available on GitHub Models
+
+    var client = new ChatCompletionsClient(
+        new Uri(endpoint),
+        new AzureKeyCredential(githubToken));
+
+    var agent = new ChatCompletionsClientAgent(
+        chatCompletionsClient: client,
+        name: "assistant",
+        modelName: modelName)
+        .RegisterMessageConnector()
+        .RegisterPrintMessage();
+
+    var response = await agent.SendAsync("Explain async/await in C#");
+    ```
+  </Step>
+</Steps>
+
+## ChatCompletionsClientAgent
+
+The main agent class for Azure AI Inference:
+
+```csharp
+using AutoGen.AzureAIInference;
+using Azure.AI.Inference;
+using Azure.Core;
+
+var client = new ChatCompletionsClient(
+    new Uri(endpoint),
+    new AzureKeyCredential(apiKey));
+
+var agent = new ChatCompletionsClientAgent(
+    chatCompletionsClient: client,
+    name: "assistant",
+    modelName: "gpt-4",
+    systemMessage: "You are a helpful assistant",
+    temperature: 0.7f,
+    maxTokens: 1024,
+    seed: null,
+    responseFormat: null)
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+```
+
+### Constructor Parameters
+
+<ParamField path="chatCompletionsClient" type="ChatCompletionsClient" required>
+  Azure AI Inference chat client
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the agent
+</ParamField>
+
+<ParamField path="modelName" type="string" required>
+  Model name (e.g., "gpt-4", "llama-3.1-8b")
+</ParamField>
+
+<ParamField path="systemMessage" type="string" default="You are a helpful AI assistant">
+  Instructions defining the agent's behavior
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.7">
+  Sampling temperature (0.0 = deterministic, 1.0 = creative)
+</ParamField>
+
+<ParamField path="maxTokens" type="int" default="1024">
+  Maximum tokens to generate
+</ParamField>
+
+<ParamField path="seed" type="int?">
+  Random seed for reproducible outputs
+</ParamField>
+
+<ParamField path="responseFormat" type="ChatCompletionsResponseFormat?">
+  Response format (e.g., JSON mode)
+</ParamField>
+
+## Available Models
+
+### GitHub Models
+
+Models available through GitHub Models marketplace:
+
+<Tabs>
+  <Tab title="OpenAI Models">
+    ```csharp
+    var endpoint = "https://models.inference.ai.azure.com";
+    var client = new ChatCompletionsClient(
+        new Uri(endpoint),
+        new AzureKeyCredential(githubToken));
+
+    // GPT-4o
+    var gpt4o = new ChatCompletionsClientAgent(
+        client, "assistant", "gpt-4o")
+        .RegisterMessageConnector();
+
+    // GPT-4o Mini (Fast and efficient)
+    var gpt4oMini = new ChatCompletionsClientAgent(
+        client, "assistant", "gpt-4o-mini")
+        .RegisterMessageConnector();
+
+    // GPT-4 Turbo
+    var gpt4Turbo = new ChatCompletionsClientAgent(
+        client, "assistant", "gpt-4-turbo")
+        .RegisterMessageConnector();
+    ```
+  </Tab>
+  
+  <Tab title="Meta Models">
+    ```csharp
+    // Llama 3.1 8B Instruct
+    var llama8b = new ChatCompletionsClientAgent(
+        client, "assistant", "meta-llama-3.1-8b-instruct")
+        .RegisterMessageConnector();
+
+    // Llama 3.1 70B Instruct
+    var llama70b = new ChatCompletionsClientAgent(
+        client, "assistant", "meta-llama-3.1-70b-instruct")
+        .RegisterMessageConnector();
+
+    // Llama 3.1 405B Instruct (Most capable)
+    var llama405b = new ChatCompletionsClientAgent(
+        client, "assistant", "meta-llama-3.1-405b-instruct")
+        .RegisterMessageConnector();
+    ```
+  </Tab>
+  
+  <Tab title="Mistral Models">
+    ```csharp
+    // Mistral Small
+    var mistralSmall = new ChatCompletionsClientAgent(
+        client, "assistant", "Mistral-small")
+        .RegisterMessageConnector();
+
+    // Mistral Large
+    var mistralLarge = new ChatCompletionsClientAgent(
+        client, "assistant", "Mistral-large")
+        .RegisterMessageConnector();
+
+    // Mistral Nemo
+    var mistralNemo = new ChatCompletionsClientAgent(
+        client, "assistant", "Mistral-Nemo")
+        .RegisterMessageConnector();
+    ```
+  </Tab>
+  
+  <Tab title="Other Models">
+    ```csharp
+    // Cohere Command R+
+    var cohere = new ChatCompletionsClientAgent(
+        client, "assistant", "cohere-command-r-plus")
+        .RegisterMessageConnector();
+
+    // Phi-3 Mini
+    var phi3 = new ChatCompletionsClientAgent(
+        client, "assistant", "Phi-3-mini-4k-instruct")
+        .RegisterMessageConnector();
+
+    // Check GitHub Models for latest available models
+    ```
+  </Tab>
+</Tabs>
+
+## Basic Usage
+
+Simple conversation example:
+
+```csharp
+using AutoGen.AzureAIInference;
+using AutoGen.AzureAIInference.Extension;
+using AutoGen.Core;
+using Azure.AI.Inference;
+using Azure.Core;
+
+var endpoint = Environment.GetEnvironmentVariable("AZURE_AI_ENDPOINT");
+var apiKey = Environment.GetEnvironmentVariable("AZURE_AI_API_KEY");
+
+var client = new ChatCompletionsClient(
+    new Uri(endpoint),
+    new AzureKeyCredential(apiKey));
+
+var agent = new ChatCompletionsClientAgent(
+    chatCompletionsClient: client,
+    name: "assistant",
+    modelName: "gpt-4",
+    systemMessage: "You are a helpful coding assistant")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+// Send text message
+var response = await agent.SendAsync(
+    new TextMessage(Role.User, "Write a C# factorial function"));
+
+Console.WriteLine(response.GetContent());
+```
+
+## Streaming Responses
+
+Stream responses for real-time output:
+
+```csharp
+var agent = new ChatCompletionsClientAgent(
+    client, "assistant", "gpt-4")
+    .RegisterMessageConnector();
+
+var messages = new[]
+{
+    new TextMessage(Role.User, "Write a long story")
+};
+
+await foreach (var message in agent.GenerateStreamingReplyAsync(messages))
+{
+    if (message.GetContent() is string content)
+    {
+        Console.Write(content);
+    }
+}
+```
+
+## Function Calling
+
+Add function calling capabilities:
+
+```csharp
+using AutoGen.Core;
+using Microsoft.Extensions.AI;
+
+public partial class DatabaseTools
+{
+    /// <summary>
+    /// Query database
+    /// </summary>
+    /// <param name="query">SQL query</param>
+    [Function]
+    public async Task<string> QueryDatabase(string query)
+    {
+        // Execute query
+        return "Query results...";
+    }
+
+    /// <summary>
+    /// Get table schema
+    /// </summary>
+    /// <param name="tableName">table name</param>
+    [Function]
+    public async Task<string> GetSchema(string tableName)
+    {
+        return $"Schema for {tableName}...";
+    }
+}
+
+var tools = new DatabaseTools();
+
+AIFunction[] functions = [
+    AIFunctionFactory.Create(tools.QueryDatabase),
+    AIFunctionFactory.Create(tools.GetSchema),
+];
+
+var functionMiddleware = new FunctionCallMiddleware(functions);
+
+var agent = new ChatCompletionsClientAgent(
+    client, "assistant", "gpt-4")
+    .RegisterMessageConnector()
+    .RegisterStreamingMiddleware(functionMiddleware)
+    .RegisterPrintMessage();
+
+var response = await agent.SendAsync(
+    new TextMessage(
+        Role.User,
+        "Show me the schema for the Users table"));
+```
+
+## Multi-Agent with Different Models
+
+Combine different models in group chat:
+
+```csharp
+using AutoGen.Core;
+using AutoGen.AzureAIInference;
+using AutoGen.AzureAIInference.Extension;
+
+var githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+var endpoint = "https://models.inference.ai.azure.com";
+
+var client = new ChatCompletionsClient(
+    new Uri(endpoint),
+    new AzureKeyCredential(githubToken));
+
+// Fast agent with GPT-4o Mini
+var researcher = new ChatCompletionsClientAgent(
+    client,
+    "researcher",
+    "gpt-4o-mini",
+    systemMessage: "You research and gather information quickly")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+// Powerful agent with Llama 405B
+var analyst = new ChatCompletionsClientAgent(
+    client,
+    "analyst",
+    "meta-llama-3.1-405b-instruct",
+    systemMessage: "You perform deep analysis and reasoning")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+// Cost-effective agent with Phi-3
+var writer = new ChatCompletionsClientAgent(
+    client,
+    "writer",
+    "Phi-3-mini-4k-instruct",
+    systemMessage: "You write clear, concise summaries")
+    .RegisterMessageConnector()
+    .RegisterPrintMessage();
+
+var admin = new ChatCompletionsClientAgent(
+    client, "admin", "gpt-4o")
+    .RegisterMessageConnector();
+
+var group = new GroupChat(
+    members: [researcher, analyst, writer],
+    admin: admin);
+
+var result = await group.CallAsync(
+    new[] { new TextMessage(Role.User, "Analyze market trends in AI") },
+    maxRound: 10);
+```
+
+## JSON Mode
+
+Force JSON responses:
+
+```csharp
+using Azure.AI.Inference;
+
+var agent = new ChatCompletionsClientAgent(
+    chatCompletionsClient: client,
+    name: "assistant",
+    modelName: "gpt-4",
+    systemMessage: "You output valid JSON only",
+    responseFormat: new ChatCompletionsResponseFormat
+    {
+        Type = ChatCompletionsResponseFormatType.JsonObject
+    })
+    .RegisterMessageConnector();
+
+var response = await agent.SendAsync(
+    new TextMessage(
+        Role.User,
+        "Create JSON for a person with name, age, and hobbies"));
+
+Console.WriteLine(response.GetContent());
+// Output: {"name": "John", "age": 30, "hobbies": ["reading", "gaming"]}
+```
+
+## Message Support
+
+Supported message types:
+
+```csharp
+using AutoGen.Core;
+
+// Text message (default)
+var textMsg = new TextMessage(Role.User, "Hello");
+
+// Raw Azure AI message
+var rawMsg = MessageEnvelope.Create(
+    new ChatRequestUserMessage("Hello"));
+
+// Agent handles both formats
+var response = await agent.SendAsync(textMsg);
+```
+
+## Configuration Options
+
+### Temperature and Randomness
+
+```csharp
+// Deterministic (code, analysis)
+var deterministic = new ChatCompletionsClientAgent(
+    client, "assistant", "gpt-4",
+    temperature: 0.0f,
+    seed: 42)
+    .RegisterMessageConnector();
+
+// Creative (writing, brainstorming)
+var creative = new ChatCompletionsClientAgent(
+    client, "assistant", "gpt-4",
+    temperature: 1.0f)
+    .RegisterMessageConnector();
+```
+
+### Token Limits
+
+```csharp
+// Short responses (cost-effective)
+var concise = new ChatCompletionsClientAgent(
+    client, "assistant", "gpt-4o-mini",
+    maxTokens: 500)
+    .RegisterMessageConnector();
+
+// Long-form content
+var verbose = new ChatCompletionsClientAgent(
+    client, "assistant", "gpt-4",
+    maxTokens: 4096)
+    .RegisterMessageConnector();
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Model Selection">
+    **For speed and cost:**
+    - GPT-4o Mini
+    - Phi-3 Mini
+    - Mistral Small
+    
+    **For quality:**
+    - GPT-4o
+    - Meta Llama 3.1 405B
+    - Mistral Large
+    
+    **For balance:**
+    - GPT-4 Turbo
+    - Meta Llama 3.1 70B
+    - Mistral Nemo
+  </Accordion>
+  
+  <Accordion title="Cost Optimization">
+    ```csharp
+    // Use GitHub Models for development/testing (free tier)
+    var devAgent = new ChatCompletionsClientAgent(
+        githubClient,
+        "dev_assistant",
+        "gpt-4o-mini",
+        maxTokens: 500)
+        .RegisterMessageConnector();
+    
+    // Use Azure AI Studio for production
+    var prodAgent = new ChatCompletionsClientAgent(
+        azureClient,
+        "prod_assistant",
+        "gpt-4",
+        maxTokens: 2000)
+        .RegisterMessageConnector();
+    ```
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    ```csharp
+    using Azure;
+
+    try
+    {
+        var response = await agent.SendAsync(message);
+    }
+    catch (RequestFailedException ex) when (ex.Status == 429)
+    {
+        // Rate limited
+        Console.WriteLine("Rate limit exceeded. Retrying...");
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        // Retry
+    }
+    catch (RequestFailedException ex)
+    {
+        Console.WriteLine($"Azure AI error: {ex.Message}");
+        Console.WriteLine($"Status: {ex.Status}");
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Reuse `ChatCompletionsClient` instances
+    - Use streaming for long responses
+    - Set appropriate token limits
+    - Consider model capabilities vs. cost
+    - Use GitHub Models for testing
+  </Accordion>
+</AccordionGroup>
+
+## Environment Variables
+
+<ParamField path="AZURE_AI_ENDPOINT" type="string">
+  Your Azure AI endpoint URL
+</ParamField>
+
+<ParamField path="AZURE_AI_API_KEY" type="string">
+  Your Azure AI API key
+</ParamField>
+
+<ParamField path="GITHUB_TOKEN" type="string">
+  GitHub personal access token for GitHub Models
+</ParamField>
+
+## GitHub Models vs Azure AI Studio
+
+<CardGroup cols={2}>
+  <Card title="GitHub Models">
+    **Advantages:**
+    - Free tier for testing
+    - Easy setup with GitHub token
+    - Access to multiple model providers
+    - Great for development
+    
+    **Limitations:**
+    - Rate limits on free tier
+    - Not for production at scale
+  </Card>
+  
+  <Card title="Azure AI Studio">
+    **Advantages:**
+    - Production-ready
+    - Enterprise SLAs
+    - Private deployments
+    - Custom fine-tuning
+    - Higher rate limits
+    
+    **Use for:**
+    - Production applications
+    - High-volume scenarios
+    - Enterprise requirements
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="OpenAI Integration" icon="openai" href="/dotnet/openai">
+    Use OpenAI models directly
+  </Card>
+  
+  <Card title="Function Calling" icon="function" href="/dotnet/function-calling">
+    Add tools to your agents
+  </Card>
+  
+  <Card title="Group Chat" icon="users" href="/dotnet/group-chat">
+    Create multi-agent workflows
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples">
+    See complete examples
+  </Card>
+</CardGroup>

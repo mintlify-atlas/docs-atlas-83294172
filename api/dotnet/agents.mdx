@@ -1,0 +1,450 @@
+---
+title: 'AutoGen Agents'
+description: '.NET agent implementations and specialized components'
+icon: 'robot'
+---
+
+Pre-built agent implementations and specialized components for common use cases.
+
+## AI Agents
+
+<AccordionGroup>
+  <Accordion title="InferenceAgent<T>" icon="brain">
+    Base class for agents using Microsoft.Extensions.AI for chat completion.
+
+    ```csharp
+    using Microsoft.AutoGen.Agents;
+    using Microsoft.AutoGen.Contracts;
+    using Microsoft.AutoGen.Core;
+    using Microsoft.Extensions.AI;
+
+    public class MyAIAgent : InferenceAgent<MyMessage>
+    {
+        public MyAIAgent(
+            AgentId id,
+            IAgentRuntime runtime,
+            string name,
+            ILogger<InferenceAgent<MyMessage>>? logger,
+            IChatClient client)
+            : base(id, runtime, name, logger, client)
+        {
+        }
+
+        public async Task<ChatResponse> GenerateResponseAsync(
+            IList<ChatMessage> messages,
+            ChatOptions? options = null)
+        {
+            return await ChatClient.GetResponseAsync(messages, options);
+        }
+    }
+    ```
+
+    <ParamField path="T" type="type parameter" required>
+      Message type (must implement IMessage)
+    </ParamField>
+
+    <ParamField path="id" type="AgentId" required>
+      Agent identifier
+    </ParamField>
+
+    <ParamField path="runtime" type="IAgentRuntime" required>
+      Runtime environment
+    </ParamField>
+
+    <ParamField path="name" type="string" required>
+      Agent name
+    </ParamField>
+
+    <ParamField path="logger" type="ILogger?">
+      Optional logger
+    </ParamField>
+
+    <ParamField path="client" type="IChatClient" required>
+      Chat client from Microsoft.Extensions.AI
+    </ParamField>
+
+    ### Properties
+
+    <ResponseField name="ChatClient" type="IChatClient">
+      Gets the chat client for inference
+    </ResponseField>
+
+    ### Methods
+
+    <ResponseField name="CompleteAsync" type="Task<ChatResponse>">
+      Generate a chat completion
+
+      ```csharp
+      var response = await CompleteAsync(
+          chatMessages: messages,
+          options: new ChatOptions
+          {
+              Temperature = 0.7f,
+              MaxTokens = 1000
+          }
+      );
+      ```
+
+      <ParamField path="chatMessages" type="IList<ChatMessage>" required>
+        Conversation messages
+      </ParamField>
+
+      <ParamField path="options" type="ChatOptions?">
+        Generation options
+      </ParamField>
+
+      <ParamField path="cancellationToken" type="CancellationToken">
+        Cancellation token
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="CompleteStreamingAsync" type="IAsyncEnumerable<ChatResponseUpdate>">
+      Stream chat completion chunks
+
+      ```csharp
+      await foreach (var update in CompleteStreamingAsync(messages))
+      {
+          Console.Write(update.Content);
+      }
+      ```
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## I/O Agents
+
+<AccordionGroup>
+  <Accordion title="IProcessIO" icon="terminal">
+    Interface for process I/O operations.
+
+    ```csharp
+    using Microsoft.AutoGen.Agents;
+
+    public interface IProcessIO
+    {
+        Task WriteAsync(string content);
+        Task<string> ReadAsync();
+    }
+    ```
+
+    <ResponseField name="WriteAsync" type="Task">
+      Write content to output
+
+      <ParamField path="content" type="string" required>
+        Content to write
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="ReadAsync" type="Task<string>">
+      Read input from user or process
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="IHandleConsole" icon="desktop">
+    Interface for console interaction agents.
+
+    ```csharp
+    using Microsoft.AutoGen.Agents;
+
+    public class ConsoleAgent : BaseAgent, IHandleConsole
+    {
+        public async ValueTask HandleConsoleInputAsync(
+            string input,
+            MessageContext context)
+        {
+            // Process console input
+            await WriteToConsoleAsync($"Received: {input}");
+        }
+
+        public async Task WriteToConsoleAsync(string message)
+        {
+            Console.WriteLine(message);
+        }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="IHandleFileIO" icon="file">
+    Interface for file I/O operations.
+
+    ```csharp
+    using Microsoft.AutoGen.Agents;
+
+    public class FileAgent : BaseAgent, IHandleFileIO
+    {
+        public async ValueTask<string> ReadFileAsync(
+            string filePath,
+            MessageContext context)
+        {
+            return await File.ReadAllTextAsync(filePath);
+        }
+
+        public async ValueTask WriteFileAsync(
+            string filePath,
+            string content,
+            MessageContext context)
+        {
+            await File.WriteAllTextAsync(filePath, content);
+        }
+    }
+    ```
+
+    <ResponseField name="ReadFileAsync" type="ValueTask<string>">
+      Read file contents
+
+      <ParamField path="filePath" type="string" required>
+        Path to file
+      </ParamField>
+    </ResponseField>
+
+    <ResponseField name="WriteFileAsync" type="ValueTask">
+      Write content to file
+
+      <ParamField path="filePath" type="string" required>
+        Path to file
+      </ParamField>
+
+      <ParamField path="content" type="string" required>
+        Content to write
+      </ParamField>
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Agent Chat (Teams)
+
+<AccordionGroup>
+  <Accordion title="TeamState" icon="users">
+    State management for agent teams.
+
+    ```csharp
+    using Microsoft.AutoGen.AgentChat;
+
+    public class TeamState
+    {
+        public List<Message> History { get; set; } = new();
+        public Dictionary<string, object> SharedContext { get; set; } = new();
+        public string CurrentSpeaker { get; set; } = string.Empty;
+    }
+    ```
+
+    <ResponseField name="History" type="List<Message>">
+      Conversation history
+    </ResponseField>
+
+    <ResponseField name="SharedContext" type="Dictionary<string, object>">
+      Shared context between agents
+    </ResponseField>
+
+    <ResponseField name="CurrentSpeaker" type="string">
+      Current active agent
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+## Termination Conditions
+
+<AccordionGroup>
+  <Accordion title="MaxMessageTermination" icon="hashtag">
+    Terminate after maximum messages.
+
+    ```csharp
+    using Microsoft.AutoGen.AgentChat.Terminations;
+
+    var termination = new MaxMessageTermination(maxMessages: 20);
+    ```
+
+    <ParamField path="maxMessages" type="int" required>
+      Maximum number of messages
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="TextMessageTermination" icon="text">
+    Terminate on specific text pattern.
+
+    ```csharp
+    var termination = new TextMessageTermination("TERMINATE");
+    ```
+
+    <ParamField path="pattern" type="string" required>
+      Text pattern to match
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="TextMentionTermination" icon="at">
+    Terminate when text mentions specific content.
+
+    ```csharp
+    var termination = new TextMentionTermination("@done");
+    ```
+  </Accordion>
+
+  <Accordion title="TimeoutTermination" icon="clock">
+    Terminate after time limit.
+
+    ```csharp
+    var termination = new TimeoutTermination(
+        timeout: TimeSpan.FromMinutes(5)
+    );
+    ```
+
+    <ParamField path="timeout" type="TimeSpan" required>
+      Maximum execution time
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="TokenUsageTermination" icon="coins">
+    Terminate after token budget.
+
+    ```csharp
+    var termination = new TokenUsageTermination(maxTokens: 10000);
+    ```
+
+    <ParamField path="maxTokens" type="int" required>
+      Maximum tokens to consume
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="StopMessageTermination" icon="stop">
+    Terminate on stop message.
+
+    ```csharp
+    var termination = new StopMessageTermination();
+    ```
+  </Accordion>
+
+  <Accordion title="SourceMatchTermination" icon="filter">
+    Terminate when message source matches.
+
+    ```csharp
+    var termination = new SourceMatchTermination("supervisor");
+    ```
+  </Accordion>
+
+  <Accordion title="HandoffTermination" icon="handshake">
+    Terminate on agent handoff.
+
+    ```csharp
+    var termination = new HandoffTermination();
+    ```
+  </Accordion>
+
+  <Accordion title="FunctionCallTermination" icon="function">
+    Terminate on specific function call.
+
+    ```csharp
+    var termination = new FunctionCallTermination("complete_task");
+    ```
+  </Accordion>
+
+  <Accordion title="ExternalTermination" icon="door-open">
+    Terminate based on external signal.
+
+    ```csharp
+    var cts = new CancellationTokenSource();
+    var termination = new ExternalTermination(cts.Token);
+
+    // Trigger termination
+    cts.Cancel();
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Agent Host
+
+<AccordionGroup>
+  <Accordion title="Host" icon="server">
+    Application host for running agent systems.
+
+    ```csharp
+    using Microsoft.AutoGen.AgentHost;
+
+    public class Program
+    {
+        public static async Task Main(string[] args)
+        {
+            var builder = Host.CreateApplicationBuilder(args);
+
+            // Configure services
+            builder.Services.AddSingleton<IAgentRuntime, InProcessRuntime>();
+            builder.Services.AddTransient<WorkerAgent>();
+
+            var host = builder.Build();
+            await host.RunAsync();
+        }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: Complete AI Agent
+
+```csharp
+using Microsoft.AutoGen.Agents;
+using Microsoft.AutoGen.Contracts;
+using Microsoft.AutoGen.Core;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Google.Protobuf;
+
+public class TaskMessage : IMessage
+{
+    public string Content { get; set; } = string.Empty;
+    // IMessage implementation...
+}
+
+public class AssistantAgent : InferenceAgent<TaskMessage>
+{
+    public AssistantAgent(
+        AgentId id,
+        IAgentRuntime runtime,
+        IChatClient chatClient,
+        ILogger<InferenceAgent<TaskMessage>> logger)
+        : base(id, runtime, "Assistant", logger, chatClient)
+    {
+    }
+
+    public async ValueTask<object?> HandleAsync(
+        TaskMessage message,
+        MessageContext context)
+    {
+        var messages = new List<ChatMessage>
+        {
+            new ChatMessage(ChatRole.System, "You are a helpful assistant."),
+            new ChatMessage(ChatRole.User, message.Content)
+        };
+
+        var response = await ChatClient.GetResponseAsync(
+            messages,
+            new ChatOptions
+            {
+                Temperature = 0.7f,
+                MaxTokens = 1000
+            });
+
+        return new TaskMessage { Content = response.Content };
+    }
+}
+
+// Usage
+var runtime = new InProcessRuntime();
+
+await runtime.RegisterAgentFactoryAsync(
+    new AgentType("assistant"),
+    async (id, rt) => new AssistantAgent(
+        id,
+        rt,
+        chatClient,
+        logger)
+);
+
+var response = await runtime.SendMessageAsync(
+    new TaskMessage { Content = "Write a poem" },
+    new AgentId("assistant", "default")
+);
+```
+
+## See Also
+
+- [Microsoft.AutoGen.Core](/api/dotnet/core) - Core runtime and contracts
+- [Microsoft.AutoGen.Extensions](/api/dotnet/extensions) - Extensions and integrations
