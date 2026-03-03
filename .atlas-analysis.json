@@ -1,0 +1,192 @@
+{
+  "projectType": "framework",
+  "projectName": "AutoGen",
+  "projectDescription": "A multi-language framework for building agentic AI applications with event-driven agents and multi-agent orchestration.",
+  "theme": "palm",
+  "primaryColor": "#7C3AED",
+  "lightColor": "#A78BFA",
+  "darkColor": "#5B21B6",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation",
+              "concepts"
+            ]
+          },
+          {
+            "group": "AgentChat",
+            "pages": [
+              "agentchat/overview",
+              "agentchat/agents",
+              "agentchat/teams",
+              "agentchat/tools",
+              "agentchat/models",
+              "agentchat/memory",
+              "agentchat/orchestration-patterns"
+            ]
+          },
+          {
+            "group": "Core API",
+            "pages": [
+              "core/overview",
+              "core/agent-runtime",
+              "core/message-passing",
+              "core/distributed-runtime",
+              "core/event-driven-architecture"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "extensions/overview",
+              "extensions/model-clients",
+              "extensions/code-executors",
+              "extensions/tools",
+              "extensions/custom-extensions"
+            ]
+          },
+          {
+            "group": "Developer Tools",
+            "pages": [
+              "tools/autogen-studio",
+              "tools/autogen-bench",
+              "tools/magentic-one"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/custom-agents",
+              "guides/multi-agent-workflows",
+              "guides/tool-integration",
+              "guides/mcp-servers",
+              "guides/debugging-tracing",
+              "guides/migration-guide"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": ".NET",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "dotnet/introduction",
+              "dotnet/quickstart",
+              "dotnet/installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "dotnet/agents",
+              "dotnet/group-chat",
+              "dotnet/function-calling",
+              "dotnet/code-execution"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "dotnet/openai",
+              "dotnet/anthropic",
+              "dotnet/azure",
+              "dotnet/semantic-kernel"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Python API",
+            "pages": [
+              "api/python/core",
+              "api/python/agentchat",
+              "api/python/extensions"
+            ]
+          },
+          {
+            "group": ".NET API",
+            "pages": [
+              "api/dotnet/core",
+              "api/dotnet/agents",
+              "api/dotnet/extensions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Basic Examples",
+            "pages": [
+              "examples/hello-world",
+              "examples/two-agent-chat",
+              "examples/tool-calling"
+            ]
+          },
+          {
+            "group": "Advanced Examples",
+            "pages": [
+              "examples/web-browsing",
+              "examples/code-execution",
+              "examples/swarm-pattern",
+              "examples/graph-orchestration"
+            ]
+          },
+          {
+            "group": "Applications",
+            "pages": [
+              "examples/research-assistant",
+              "examples/customer-support",
+              "examples/data-analysis"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Event-driven agent runtime with Actor model",
+    "Multi-agent orchestration patterns (RoundRobin, Selector, Swarm, GraphFlow)",
+    "Cross-language support (Python, .NET, TypeScript)",
+    "Extensible model client system (OpenAI, Anthropic, Azure, Ollama, etc.)",
+    "Built-in tool integration (MCP servers, code execution, web browsing)",
+    "AutoGen Studio - no-code GUI for prototyping",
+    "Distributed runtime for scalable agent systems",
+    "Memory and state management",
+    "Observability with tracing and logging"
+  ],
+  "publicApiSurface": [
+    "autogen_core.Agent",
+    "autogen_core.AgentRuntime",
+    "autogen_core.RoutedAgent",
+    "autogen_core.MessageContext",
+    "autogen_agentchat.agents.AssistantAgent",
+    "autogen_agentchat.agents.CodeExecutorAgent",
+    "autogen_agentchat.agents.UserProxyAgent",
+    "autogen_agentchat.teams.RoundRobinGroupChat",
+    "autogen_agentchat.teams.SelectorGroupChat",
+    "autogen_agentchat.teams.Swarm",
+    "autogen_agentchat.teams.MagenticOneGroupChat",
+    "autogen_agentchat.teams.GraphFlow",
+    "autogen_ext.models.OpenAIChatCompletionClient",
+    "autogen_ext.models.AnthropicChatCompletionClient",
+    "autogen_ext.tools.McpWorkbench",
+    "autogen_ext.code_executors.DockerCommandLineCodeExecutor",
+    "AutoGen.Core.Agent (C#)",
+    "AutoGen.AssistantAgent (C#)",
+    "AutoGen.GroupChat (C#)"
+  ]
+}
